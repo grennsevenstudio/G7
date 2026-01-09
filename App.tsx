@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import type { User, Transaction, Notification, ChatMessage, PlatformSettings, AdminActionLog, Language, InvestmentPlan, SyncStatus } from './types';
 import { View, TransactionStatus, TransactionType, AdminActionType, UserStatus, InvestorRank } from './types';
@@ -107,8 +105,11 @@ const App: React.FC = () => {
         setInitialReferralCode(refCode);
         // Force view to register page if ref link is used
         setView(View.Register);
-        // Clean the URL to avoid confusion on refresh, keeping the path
-        window.history.replaceState({}, document.title, '/register');
+        
+        // Clean the URL to avoid confusion on refresh, keeping the path intact (safe for subdirectories)
+        const url = new URL(window.location.href);
+        url.searchParams.delete('ref');
+        window.history.replaceState({}, document.title, url.toString());
     } else {
         const storedCode = localStorage.getItem('referral_code');
         if (storedCode) {
