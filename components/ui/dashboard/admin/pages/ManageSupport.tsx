@@ -1,0 +1,487 @@
+
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import type { User, ChatMessage, SupportStatus, Transaction } from '../../../../../types';
+import { TransactionType, TransactionStatus } from '../../../../../types';
+import Card from '../../../../ui/Card';
+import Input from '../../../../ui/Input';
+import Button from '../../../../ui/Button';
+import { ICONS } from '../../../../../constants';
+import { formatCurrency } from '../../../../../lib/utils';
+
+interface ManageSupportProps {
+    adminUser: User;
+    allUsers: User[];
+    allMessages: ChatMessage[];
+    allTransactions: Transaction[];
+    onSendMessage: (senderId: string, receiverId: string, text: string, attachment?: File) => void;
+    onUpdateUser: (user: User) => void;
+}
+
+const QUICK_REPLIES = [
+    { label: "Saudação", text: "Olá! Bem-vindo ao suporte da GreennSeven. Como posso ajudar você hoje?" },
+    { label: "Prazo de Saque", text: "Nossos saques são processados de segunda a sexta, das 09:00 às 18:00. O prazo médio para compensação é de 24 horas úteis." },
+    { label: "Depósito PIX", text: "Para depositar via PIX, vá até o Dashboard e clique em 'Depositar'. O valor é convertido automaticamente para Dólar." },
+    { label: "Resetar Senha", text: "Você pode redefinir sua senha clicando em 'Esqueceu a senha?' na tela de login ou nas configurações do seu perfil." },
+    { label: "Encerrar", text: "Obrigado pelo contato! Se precisar de mais alguma coisa, estamos à disposição. Tenha um ótimo dia!" },
+];
+
+function getTimeWaiting(timestamp: string): string {
+    const diff = new Date().getTime() - new Date(timestamp).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "agora";
+    if (minutes < 60) return `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
+}
+
+const AttachmentDisplay: React.FC<{ attachment: NonNullable<ChatMessage['attachment']> }> = ({ attachment }) => {
+    const fileType = attachment.fileType || '';
+    const fileName = attachment.fileName || 'Unknown File';
+    const isImage = fileType.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+    
+    let extension = 'FILE';
+    if (fileType && fileType.includes('/')) {
+        extension = fileType.split('/')[1].toUpperCase();
+    } else if (fileName && fileName.includes('.')) {
+        extension = fileName.split('.').pop()?.toUpperCase() || 'FILE';
+    }
+
+    if (isImage) {
+        return (
+            <a 
+                href={attachment.fileUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="mt-2 block rounded-xl overflow-hidden border border-gray-800 bg-black transition-all duration-300 hover:border-brand-green/50 hover:shadow-lg hover:shadow-brand-green/10 group max-w-xs"
+            >
+                <div className="relative aspect-video bg-gray-900 w-full overflow-hidden">
+                    <img 
+                        src={attachment.fileUrl} 
+                        alt={fileName} 
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                </div>
+                <div className="p-3 flex items-center gap-3 bg-gray-900/50">
+                     <div className="p-1.5 rounded bg-brand-green/20 text-brand-green">
+                        {ICONS.file}
+                     </div>
+                     <div className="overflow-hidden">
+                         <p className="text-xs text-gray-200 font-medium truncate group-hover:text-brand-green transition-colors">{fileName}</p>
+                         <p className="text-[10px] text-gray-500 uppercase">{extension}</p>
+                     </div>
+                </div>
+            </a>
+        );
+    }
+
+    return (
+         <a 
+            href={attachment.fileUrl} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="mt-2 flex items-center gap-3 bg-gray-800/50 border border-gray-700 p-3 rounded-xl hover:bg-gray-700 hover:border-brand-green/30 transition-all max-w-xs group"
+        >
+            <div className="p-2 bg-gray-900 rounded-lg text-brand-green group-hover:bg-brand-green/20 transition-colors">
+                {ICONS.file}
+            </div>
+            <div className="truncate flex-1">
+                <p className="font-semibold text-sm text-gray-200 truncate group-hover:text-brand-green transition-colors">{fileName}</p>
+                <p className="text-xs text-gray-500 uppercase">{extension}</p>
+            </div>
+        </a>
+    );
+};
+
+const ChatBubble: React.FC<{ message: ChatMessage; isSender: boolean; avatarUrl: string }> = ({ message, isSender, avatarUrl }) => {
+    const bubbleColor = isSender ? 'bg-brand-green text-brand-black' : 'bg-brand-black';
+
+    return (
+        <div className={`flex items-start gap-3 w-full max-w-lg ${isSender ? 'flex-row-reverse ml-auto' : 'flex-row mr-auto'}`}>
+            <img src={avatarUrl} alt="Avatar" className="w-8 h-8 rounded-full border border-gray-700" />
+            <div className="flex flex-col">
+                 <div className={`px-4 py-2 rounded-2xl shadow-sm ${bubbleColor} ${isSender ? 'rounded-br-none' : 'rounded-bl-none'}`}>
+                    <p className="whitespace-pre-wrap break-words text-sm">{message.text}</p>
+                    {message.attachment && <AttachmentDisplay attachment={message.attachment} />}
+                </div>
+                <span className={`text-[10px] text-gray-500 mt-1 px-2 ${isSender ? 'text-right' : 'text-left'}`}>
+                    {new Date(message.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+            </div>
+        </div>
+    );
+};
+
+const UserFinancialSummary: React.FC<{ transactions: Transaction[], userId: string }> = ({ transactions, userId }) => {
+    const stats = useMemo(() => {
+        const userTxs = transactions.filter(t => t.userId === userId && t.status === TransactionStatus.Completed);
+        
+        const deposits = userTxs
+            .filter(t => t.type === TransactionType.Deposit)
+            .reduce((acc, curr) => acc + curr.amountUSD, 0);
+            
+        const totalWithdrawals = userTxs
+            .filter(t => t.type === TransactionType.Withdrawal)
+            .reduce((acc, curr) => acc + Math.abs(curr.amountUSD), 0);
+
+        const bonusWithdrawals = userTxs
+            .filter(t => t.type === TransactionType.Withdrawal && t.walletSource === 'bonus')
+            .reduce((acc, curr) => acc + Math.abs(curr.amountUSD), 0);
+
+        return { deposits, totalWithdrawals, bonusWithdrawals };
+    }, [transactions, userId]);
+
+    return (
+        <div className="bg-brand-black/40 border-b border-gray-800 p-3 grid grid-cols-3 gap-2">
+            <div className="bg-brand-gray p-2 rounded border border-gray-800 text-center">
+                <p className="text-[10px] text-gray-500 uppercase font-bold">Depósitos</p>
+                <p className="text-brand-green font-bold text-xs sm:text-sm">{formatCurrency(stats.deposits, 'USD')}</p>
+            </div>
+            <div className="bg-brand-gray p-2 rounded border border-gray-800 text-center">
+                <p className="text-[10px] text-gray-500 uppercase font-bold">Total Saques</p>
+                <p className="text-red-400 font-bold text-xs sm:text-sm">{formatCurrency(stats.totalWithdrawals, 'USD')}</p>
+            </div>
+            <div className="bg-brand-gray p-2 rounded border border-gray-800 text-center">
+                <p className="text-[10px] text-gray-500 uppercase font-bold">Saque Bônus</p>
+                <p className="text-brand-blue font-bold text-xs sm:text-sm">{formatCurrency(stats.bonusWithdrawals, 'USD')}</p>
+            </div>
+        </div>
+    );
+};
+
+const ManageSupport: React.FC<ManageSupportProps> = ({ adminUser, allUsers, allMessages, allTransactions, onSendMessage, onUpdateUser }) => {
+    const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+    const [newMessage, setNewMessage] = useState('');
+    const [attachment, setAttachment] = useState<File | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'resolved'>('all');
+    const [currentTime, setCurrentTime] = useState(new Date().getTime());
+    
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Refresh timers for waiting indicators
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date().getTime()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const conversations = useMemo(() => {
+        const userChats: { [userId: string]: { lastMessage: ChatMessage, unreadCount: number } } = {};
+
+        allMessages.forEach(msg => {
+            const otherUserId = msg.senderId === adminUser.id ? msg.receiverId : msg.senderId;
+            if (otherUserId === adminUser.id) return;
+
+            if (!userChats[otherUserId] || new Date(msg.timestamp) > new Date(userChats[otherUserId].lastMessage.timestamp)) {
+                userChats[otherUserId] = { ...userChats[otherUserId], lastMessage: msg };
+            }
+
+            if (msg.receiverId === adminUser.id && !msg.isRead) {
+                 userChats[otherUserId] = { ...userChats[otherUserId], unreadCount: (userChats[otherUserId]?.unreadCount || 0) + 1 };
+            }
+        });
+        
+        let chats = Object.entries(userChats)
+            .map(([userId, data]) => {
+                const user = allUsers.find(u => u.id === userId);
+                return { userId, user, ...data };
+            })
+            .filter(item => item.user);
+
+        if (searchTerm) {
+            chats = chats.filter(c => c.user?.name.toLowerCase().includes(searchTerm.toLowerCase()));
+        }
+
+        if (filterStatus !== 'all') {
+            chats = chats.filter(c => {
+                const status = c.user?.supportStatus || 'open'; 
+                return status === filterStatus;
+            });
+        }
+
+        // Sort by unread first, then by most recent message
+        return chats.sort((a,b) => {
+            if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+            if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+            return new Date(b.lastMessage.timestamp).getTime() - new Date(a.lastMessage.timestamp).getTime();
+        });
+    }, [allMessages, adminUser.id, allUsers, searchTerm, filterStatus]);
+    
+    const selectedConversationMessages = useMemo(() => {
+        if (!selectedUserId) return [];
+        return allMessages
+            .filter(m => (m.senderId === selectedUserId && m.receiverId === adminUser.id) || (m.senderId === adminUser.id && m.receiverId === selectedUserId))
+            .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    }, [allMessages, selectedUserId, adminUser.id]);
+    
+    const selectedUser = useMemo(() => {
+        return allUsers.find(u => u.id === selectedUserId);
+    }, [selectedUserId, allUsers]);
+
+    // Mark as read when selecting conversation
+    useEffect(() => {
+        if (selectedUserId && adminUser.id) {
+            const unreadMessages = selectedConversationMessages.filter(m => m.receiverId === adminUser.id && !m.isRead);
+            // This logic usually happens on the backend or main app state handler, 
+            // but we simulate it for immediate UI feedback.
+        }
+    }, [selectedUserId, selectedConversationMessages, adminUser.id]);
+
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [selectedConversationMessages]);
+    
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setAttachment(e.target.files[0]);
+        }
+    };
+
+    const handleSend = (e: React.FormEvent) => {
+        e.preventDefault();
+        if ((newMessage.trim() || attachment) && selectedUserId) {
+            onSendMessage(adminUser.id, selectedUserId, newMessage.trim(), attachment || undefined);
+            setNewMessage('');
+            setAttachment(null);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+            if (selectedUser && selectedUser.supportStatus === 'resolved') {
+                onUpdateUser({ ...selectedUser, supportStatus: 'open' });
+            }
+        }
+    };
+
+    const handleQuickReply = (text: string) => {
+        setNewMessage(text);
+    };
+
+    const toggleTicketStatus = () => {
+        if (!selectedUser) return;
+        const newStatus: SupportStatus = selectedUser.supportStatus === 'resolved' ? 'open' : 'resolved';
+        onUpdateUser({ ...selectedUser, supportStatus: newStatus });
+    };
+
+    return (
+        <div className="space-y-6 h-[calc(100vh-140px)] flex flex-col">
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+            />
+            <div className="flex justify-between items-center flex-shrink-0">
+                <div>
+                    <h1 className="text-3xl font-bold">Central de Suporte</h1>
+                    <p className="text-gray-400">Gerencie tickets e atendimentos.</p>
+                </div>
+            </div>
+            
+            <div className="flex flex-1 gap-6 overflow-hidden">
+                {/* Sidebar List */}
+                <Card className="w-1/3 flex flex-col p-0 overflow-hidden border-gray-800">
+                    <div className="p-4 border-b border-gray-800 space-y-3 bg-brand-black/20">
+                        <Input 
+                            label="" 
+                            id="search-users" 
+                            placeholder="Buscar usuário..." 
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="text-sm"
+                        />
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setFilterStatus('all')}
+                                className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${filterStatus === 'all' ? 'bg-brand-green text-brand-black font-bold' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                            >
+                                Todos
+                            </button>
+                            <button 
+                                onClick={() => setFilterStatus('open')}
+                                className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${filterStatus === 'open' ? 'bg-brand-green text-brand-black font-bold' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                            >
+                                Abertos
+                            </button>
+                            <button 
+                                onClick={() => setFilterStatus('resolved')}
+                                className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${filterStatus === 'resolved' ? 'bg-brand-green text-brand-black font-bold' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                            >
+                                Resolvidos
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto">
+                        {conversations.length === 0 ? (
+                             <p className="text-center text-gray-500 text-sm mt-10">Nenhuma conversa encontrada.</p>
+                        ) : (
+                            conversations.map(conv => {
+                                const isSelected = selectedUserId === conv.userId;
+                                const isResolved = conv.user?.supportStatus === 'resolved';
+                                const needsResponse = conv.lastMessage.senderId !== adminUser.id && !isResolved;
+                                return (
+                                    <div 
+                                        key={conv.userId}
+                                        className={`p-4 border-b border-gray-800 cursor-pointer transition-all hover:bg-brand-gray/80 ${isSelected ? 'bg-brand-gray border-l-4 border-l-brand-green' : 'border-l-4 border-l-transparent'} ${needsResponse ? 'bg-brand-green/5' : ''}`}
+                                        onClick={() => setSelectedUserId(conv.userId)}
+                                    >
+                                        <div className="flex justify-between items-center mb-1">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className={`font-bold text-sm ${isSelected ? 'text-white' : 'text-gray-300'}`}>{conv.user?.name}</h4>
+                                                {conv.unreadCount > 0 && (
+                                                    <span className="w-2 h-2 rounded-full bg-brand-green animate-pulse"></span>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[9px] font-bold ${needsResponse ? 'text-brand-green' : 'text-gray-600'}`}>
+                                                    {getTimeWaiting(conv.lastMessage.timestamp)}
+                                                </span>
+                                                {conv.unreadCount > 0 && (
+                                                    <span className="bg-brand-green text-brand-black text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                                                        {conv.unreadCount}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <p className={`text-xs truncate ${needsResponse ? 'text-gray-200 font-medium' : 'text-gray-500'}`}>
+                                            {conv.lastMessage.senderId === adminUser.id ? 'Você: ' : ''}{conv.lastMessage.text}
+                                        </p>
+                                    </div>
+                                )
+                            })
+                        )}
+                    </div>
+                </Card>
+
+                {/* Chat Window */}
+                <Card className="w-2/3 flex flex-col p-0 overflow-hidden border-gray-800 relative">
+                    {selectedUser ? (
+                         <>
+                            <div className="p-4 border-b border-gray-800 bg-brand-black/20 flex justify-between items-center shadow-md z-10">
+                                <div className="flex items-center gap-3">
+                                    <img src={selectedUser.avatarUrl} alt={selectedUser.name} className="w-10 h-10 rounded-full border border-gray-600"/>
+                                    <div>
+                                        <h2 className="text-lg font-bold leading-tight">{selectedUser.name}</h2>
+                                        <p className="text-xs text-gray-400">{selectedUser.email}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className={`px-3 py-1 text-xs font-bold rounded-full ${selectedUser.supportStatus === 'resolved' ? 'bg-gray-700 text-gray-300' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}>
+                                        {selectedUser.supportStatus === 'resolved' ? 'Resolvido' : 'Em Aberto'}
+                                    </span>
+                                    <button 
+                                        onClick={toggleTicketStatus}
+                                        className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+                                        title={selectedUser.supportStatus === 'resolved' ? "Reabrir Ticket" : "Marcar como Resolvido"}
+                                    >
+                                        {selectedUser.supportStatus === 'resolved' ? ICONS.archive : ICONS.check}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* Financial Context Bar */}
+                            <UserFinancialSummary transactions={allTransactions} userId={selectedUser.id} />
+
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-brand-black/10">
+                                {selectedConversationMessages.length > 0 ? (
+                                    selectedConversationMessages.map(msg => (
+                                        <ChatBubble 
+                                            key={msg.id}
+                                            message={msg}
+                                            isSender={msg.senderId === adminUser.id}
+                                            avatarUrl={msg.senderId === adminUser.id ? adminUser.avatarUrl : selectedUser.avatarUrl}
+                                        />
+                                    ))
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-gray-500 opacity-50">
+                                        {ICONS.support}
+                                        <p className="mt-2 text-sm">Início da conversa</p>
+                                    </div>
+                                )}
+                                {selectedUser.supportStatus === 'resolved' && (
+                                    <div className="text-center py-4">
+                                        <span className="bg-gray-800 text-gray-400 text-xs px-4 py-1 rounded-full border border-gray-700">
+                                            Atendimento marcado como resolvido
+                                        </span>
+                                    </div>
+                                )}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Quick Replies */}
+                            <div className="px-4 py-2 bg-brand-black border-t border-gray-800 flex gap-2 overflow-x-auto scrollbar-hide">
+                                <div className="flex items-center text-gray-500 text-[10px] uppercase font-black mr-2 flex-shrink-0">
+                                    {ICONS.flash} Respostas:
+                                </div>
+                                {QUICK_REPLIES.map((qr, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => handleQuickReply(qr.text)}
+                                        className="flex-shrink-0 px-3 py-1.5 bg-gray-800 hover:bg-brand-green hover:text-brand-black border border-gray-700 rounded-lg text-xs text-gray-300 transition-all whitespace-nowrap font-bold"
+                                    >
+                                        {qr.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="p-4 border-t border-gray-800 bg-brand-black">
+                                <form onSubmit={handleSend}>
+                                    <div className="flex gap-3 items-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="p-3 text-gray-400 hover:text-brand-green bg-gray-800 rounded-lg transition-colors"
+                                            aria-label="Anexar arquivo"
+                                        >
+                                            {ICONS.attachment}
+                                        </button>
+                                        <div className="flex-1">
+                                             <Input 
+                                                label="" 
+                                                id="admin-chat-message" 
+                                                placeholder={selectedUser.supportStatus === 'resolved' ? "Enviar mensagem reabrirá o ticket..." : "Digite sua mensagem..."}
+                                                value={newMessage}
+                                                onChange={(e) => setNewMessage(e.target.value)}
+                                            />
+                                        </div>
+                                        <Button type="submit" className="h-[46px] px-6">Responder</Button>
+                                    </div>
+                                    {attachment && (
+                                        <div className="mt-2 flex items-center gap-2 text-sm bg-gray-800 p-2 rounded-lg w-fit">
+                                            {ICONS.file}
+                                            <span className="text-gray-300 truncate max-w-[200px]">{attachment.name}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAttachment(null)}
+                                                className="ml-2 text-gray-500 hover:text-white"
+                                                aria-label="Remover anexo"
+                                            >
+                                                {ICONS.close}
+                                            </button>
+                                        </div>
+                                    )}
+                                </form>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                            <div className="p-4 bg-gray-800 rounded-full mb-4 opacity-50">
+                                {React.cloneElement(ICONS.support as React.ReactElement<any>, { className: "w-12 h-12" })}
+                            </div>
+                            <p className="text-lg font-medium">Fila de Atendimento</p>
+                            <p className="text-sm mt-2">Escolha um chamado pendente para iniciar.</p>
+                        </div>
+                    )}
+                </Card>
+            </div>
+        </div>
+    );
+};
+
+export default ManageSupport;

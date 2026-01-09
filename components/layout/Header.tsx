@@ -1,0 +1,267 @@
+
+import React, { useState, useRef, useEffect } from 'react';
+import type { User, Notification, Language, SyncStatus } from '../../types';
+import { ICONS, RANK_COLORS } from '../../constants';
+import { TRANSLATIONS } from '../../lib/translations';
+
+// Helper function for relative time
+function timeAgo(date: Date): string {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) {
+        const years = Math.floor(interval);
+        return `há ${years} ${years > 1 ? 'anos' : 'ano'}`;
+    }
+    interval = seconds / 2592000;
+    if (interval > 1) {
+        const months = Math.floor(interval);
+        return `há ${months} ${months > 1 ? 'meses' : 'mês'}`;
+    }
+    interval = seconds / 86400;
+    if (interval > 1) {
+        const days = Math.floor(interval);
+        return `há ${days} ${days > 1 ? 'dias' : 'dia'}`;
+    }
+    interval = seconds / 3600;
+    if (interval > 1) {
+        const hours = Math.floor(interval);
+        return `há ${hours} ${hours > 1 ? 'horas' : 'hora'}`;
+    }
+    interval = seconds / 60;
+    if (interval > 1) {
+        const minutes = Math.floor(interval);
+        return `há ${minutes} ${minutes > 1 ? 'minutos' : 'minuto'}`;
+    }
+    return "agora mesmo";
+}
+
+const LANGUAGE_OPTIONS: { code: Language; flag: string; label: string }[] = [
+  { code: 'pt', flag: '🇧🇷', label: 'Português' },
+  { code: 'en', flag: '🇺🇸', label: 'English' },
+  { code: 'es', flag: '🇪🇸', label: 'Español' },
+  { code: 'fr', flag: '🇫🇷', label: 'Français' },
+  { code: 'de', flag: '🇩🇪', label: 'Deutsch' },
+];
+
+// Toast Component for Refresh Feedback
+const Toast = ({ message }: { message: string }) => (
+    <div className="fixed top-20 right-4 bg-brand-green text-brand-black px-4 py-2 rounded shadow-lg z-50 animate-fade-in-up font-bold text-sm flex items-center gap-2 border border-brand-black/10">
+        <div className="bg-black/10 p-0.5 rounded-full">
+             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+        </div>
+        {message}
+    </div>
+);
+
+const SyncIndicator: React.FC<{ status: SyncStatus }> = ({ status }) => {
+    const statusMap = {
+        idle: { text: 'Iniciando', color: 'bg-gray-400', pulse: false },
+        syncing: { text: 'Sincronizando...', color: 'bg-blue-500', pulse: true },
+        online: { text: 'Online', color: 'bg-green-500', pulse: false },
+        error: { text: 'Offline', color: 'bg-red-500', pulse: false },
+    };
+    const currentStatus = statusMap[status] || statusMap.idle;
+
+    return (
+        <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+            <div className={`w-2 h-2 rounded-full ${currentStatus.color} ${currentStatus.pulse ? 'animate-pulse' : ''}`}></div>
+            <span className="hidden sm:inline">{currentStatus.text}</span>
+        </div>
+    );
+};
+
+interface HeaderProps {
+  user: User;
+  onLogout: () => void;
+  toggleSidebar: () => void;
+  notifications?: Notification[];
+  onMarkAllAsRead?: () => void;
+  isDarkMode: boolean;
+  toggleTheme: () => void;
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  onRefreshData?: () => void;
+  syncStatus: SyncStatus;
+}
+
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, toggleSidebar, notifications = [], onMarkAllAsRead, isDarkMode, toggleTheme, language, setLanguage, onRefreshData, syncStatus }) => {
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const t = TRANSLATIONS[language];
+  const firstName = user.name.split(' ')[0];
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleNotificationClick = () => {
+      setIsNotificationsOpen(!isNotificationsOpen);
+  };
+  
+  const handleRefresh = async () => {
+      if (onRefreshData) {
+          setIsRefreshing(true);
+          await onRefreshData();
+          setTimeout(() => setIsRefreshing(false), 500);
+          setToastMessage("Dados atualizados!");
+          setTimeout(() => setToastMessage(null), 3000);
+      }
+  };
+
+  return (
+    <>
+    {toastMessage && <Toast message={toastMessage} />}
+    <header className="h-16 bg-white dark:bg-brand-gray border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-3 sm:px-4 lg:px-8 sticky top-0 z-30 w-full transition-colors duration-300">
+      <div className="flex items-center gap-2 sm:gap-4 shrink">
+        <button
+          onClick={toggleSidebar}
+          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white lg:hidden focus:outline-none p-1"
+        >
+          {ICONS.menu}
+        </button>
+        <div className="flex items-center gap-2 overflow-hidden">
+            <span className="font-bold text-gray-800 dark:text-white text-sm sm:text-base truncate max-w-[120px] sm:max-w-[200px]">{t.welcome}, {firstName}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+         <div className="hidden xs:block">
+            <SyncIndicator status={syncStatus} />
+         </div>
+         {onRefreshData && (
+             <button 
+                onClick={handleRefresh} 
+                className={`text-gray-500 dark:text-gray-400 hover:text-green-500 dark:hover:text-brand-green transition-colors hidden md:block ${isRefreshing ? 'animate-spin text-green-500 dark:text-brand-green' : ''}`}
+                title="Atualizar Dados"
+             >
+                 {ICONS.refresh}
+             </button>
+         )}
+         
+        <button
+          onClick={toggleTheme}
+          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors p-1"
+          title={isDarkMode ? t.theme_light : t.theme_dark}
+        >
+          {isDarkMode ? ICONS.sun : ICONS.moon}
+        </button>
+        <div className="relative" ref={notificationRef}>
+          <button
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white relative flex items-center p-1"
+            onClick={handleNotificationClick}
+          >
+            {ICONS.bell}
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold px-1 py-0 rounded-full animate-pulse">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+
+          {isNotificationsOpen && (
+            <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-brand-gray border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl overflow-hidden animate-fade-in-up z-50">
+              <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-brand-gray">
+                <h3 className="font-bold text-gray-900 dark:text-white">Notificações</h3>
+                {unreadCount > 0 && onMarkAllAsRead && (
+                    <button onClick={onMarkAllAsRead} className="flex items-center gap-1.5 text-xs text-green-600 dark:text-brand-green hover:bg-green-500/10 dark:hover:bg-brand-green/10 px-2 py-1 rounded-md transition-colors">
+                        {ICONS.checkAll}
+                        <span className="font-semibold">Marcar todas como lidas</span>
+                    </button>
+                )}
+              </div>
+              <div className="max-h-80 overflow-y-auto">
+                {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500 text-sm">
+                        Nenhuma notificação.
+                    </div>
+                ) : (
+                    notifications.map((notification) => (
+                    <div
+                        key={notification.id}
+                        className={`p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${!notification.isRead ? 'bg-gray-50 dark:bg-gray-800/50' : ''}`}
+                    >
+                        <p className="text-sm text-gray-700 dark:text-gray-200">{notification.message}</p>
+                        <p className="text-xs text-gray-500 mt-1">{timeAgo(new Date(notification.date))}</p>
+                    </div>
+                    ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="relative" ref={profileRef}>
+            <button 
+                className="flex items-center focus:outline-none ml-1"
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+            >
+                <img
+                    src={user.avatarUrl}
+                    alt="User Avatar"
+                    className="h-8 w-8 sm:h-10 sm:w-10 rounded-full border-2 border-green-500 dark:border-brand-green object-cover hover:border-gray-400 dark:hover:border-white transition-colors"
+                />
+            </button>
+            
+            {isProfileOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-brand-gray border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl py-1 animate-fade-in-up z-50">
+                    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{user.name}</p>
+                        <p className={`text-[10px] px-2 py-0.5 mt-1 rounded-full inline-block ${RANK_COLORS[user.rank]}`}>
+                            {user.rank}
+                        </p>
+                    </div>
+                    
+                    {/* Language Selection inside Profile Dropdown */}
+                    <div className="py-2 border-b border-gray-200 dark:border-gray-700">
+                        <p className="px-4 text-[10px] text-gray-500 uppercase font-bold mb-1">Idioma / Language</p>
+                        {LANGUAGE_OPTIONS.map((option) => (
+                            <button
+                                key={option.code}
+                                onClick={() => {
+                                    setLanguage(option.code);
+                                    setIsProfileOpen(false);
+                                }}
+                                className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-3 transition-colors ${language === option.code ? 'text-green-600 dark:text-brand-green bg-gray-50 dark:bg-gray-800/50' : 'text-gray-700 dark:text-gray-300'}`}
+                            >
+                                <span className="text-lg">{option.flag}</span>
+                                <span>{option.label}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    <button
+                        onClick={onLogout}
+                        className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                    >
+                        {ICONS.logout}
+                        {t.logout}
+                    </button>
+                </div>
+            )}
+        </div>
+      </div>
+    </>
+  );
+};

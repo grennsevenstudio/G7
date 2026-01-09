@@ -1,0 +1,611 @@
+
+import React, { useState, useEffect } from 'react';
+import type { PlatformSettings, User, Transaction } from '../../../../../types';
+import Card from '../../../../ui/Card';
+import Button from '../../../../ui/Button';
+import Input from '../../../../ui/Input';
+import ToggleSwitch from '../../../../ui/ToggleSwitch';
+import { ICONS } from '../../../../../constants';
+// FIX: Removed unused `Modality` import
+import { GoogleGenAI } from "@google/genai";
+import { checkSupabaseConnection, syncUserToSupabase, syncTransactionToSupabase, syncSettingsToSupabase } from '../../../../../lib/supabase';
+
+interface SettingsProps {
+    platformSettings: PlatformSettings;
+    onUpdateSettings: (newSettings: PlatformSettings) => void;
+    allUsers: User[];
+    allTransactions?: Transaction[];
+}
+
+const Toast: React.FC<{ message: string; type: 'success' | 'error' }> = ({ message, type }) => (
+    <div className={`fixed bottom-6 right-6 px-6 py-4 rounded-lg shadow-2xl z-50 flex items-center gap-3 animate-fade-in-up ${type === 'success' ? 'bg-brand-green text-brand-black' : 'bg-red-500 text-white'}`}>
+        <div className={`p-1 rounded-full ${type === 'success' ? 'bg-black/10' : 'bg-white/20'}`}>
+            {type === 'success' ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+            ) : (
+                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+            )}
+        </div>
+        <span className="font-bold">{message}</span>
+        <style>{`
+            @keyframes fade-in-up {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .animate-fade-in-up {
+                animation: fade-in-up 0.3s ease-out forwards;
+            }
+        `}</style>
+    </div>
+);
+
+const Settings: React.FC<SettingsProps> = ({ platformSettings, onUpdateSettings, allUsers, allTransactions = [] }) => {
+    const [settings, setSettings] = useState<PlatformSettings>(platformSettings);
+    const [isSaving, setIsSaving] = useState(false);
+    const [selectedUserToReset, setSelectedUserToReset] = useState<string>(allUsers.filter(u => !u.isAdmin)[0]?.id || '');
+    
+    const [isGeneratingLogo, setIsGeneratingLogo] = useState(false);
+    const [generatedLogoUrl, setGeneratedLogoUrl] = useState<string | null>(null);
+
+    // Supabase Status State - Default to 'checking' to verify on mount
+    const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'checking' | 'connected' | 'error'>('checking');
+    const [supabaseMessage, setSupabaseMessage] = useState('Verificando conexão...');
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    // Toast State
+    const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
+
+    // SQL Code Definition - THE GOLDEN SOURCE OF TRUTH FOR DB SCHEMA
+    const sqlCode = `-- SCRIPT SQL DE CONFIGURAÇÃO TOTAL (AUTOCORREÇÃO)
+-- Copie e cole este script no SQL Editor do Supabase e clique em "Run".
+-- É seguro rodar este script múltiplas vezes. Ele não apagará dados existentes.
+
+-- 1. HABILITAR EXTENSÕES NECESSÁRIAS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. TABELA DE USUÁRIOS (users)
+-- Cria a tabela se ela não existir.
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Adiciona colunas faltantes de forma segura (idempotente).
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS plan TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS rank TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS status TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS balance_usd NUMERIC DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS capital_invested_usd NUMERIC DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS monthly_profit_usd NUMERIC DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS daily_withdrawable_usd NUMERIC DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bonus_balance_usd NUMERIC DEFAULT 0;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_plan_change_date TIMESTAMPTZ;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referred_by_id UUID REFERENCES public.users(id);
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS transaction_pin TEXT;
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS support_status TEXT DEFAULT 'open';
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS kyc_analysis TEXT; -- Coluna para análise KYC
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS additional_data JSONB DEFAULT '{}'::jsonb;
+
+-- 3. TABELA DE TRANSAÇÕES (transactions)
+CREATE TABLE IF NOT EXISTS public.transactions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL, 
+  amount_usd NUMERIC NOT NULL,
+  amount_brl NUMERIC,
+  status TEXT DEFAULT 'Pending', 
+  date DATE,
+  scheduled_date DATE,
+  withdrawal_details JSONB,
+  referral_level NUMERIC,
+  source_user_id UUID,
+  bonus_payout_handled BOOLEAN DEFAULT false,
+  wallet_source TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Adiciona colunas faltantes de forma segura (essencial para persistir os detalhes)
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS amount_brl NUMERIC;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS scheduled_date DATE;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS withdrawal_details JSONB;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS wallet_source TEXT;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS referral_level NUMERIC;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS source_user_id UUID;
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS bonus_payout_handled BOOLEAN DEFAULT false;
+
+-- Cria índices para otimizar buscas.
+CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON public.transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_status ON public.transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_type ON public.transactions(type);
+
+-- 4. TABELA DE MENSAGENS DE CHAT (messages)
+CREATE TABLE IF NOT EXISTS public.messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  sender_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  receiver_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  text TEXT,
+  timestamp TIMESTAMPTZ,
+  is_read BOOLEAN DEFAULT false,
+  attachment JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 5. TABELA DE CONFIGURAÇÃO DO PLANO DE CARREIRA (career_plan_config)
+CREATE TABLE IF NOT EXISTS public.career_plan_config (
+    level INTEGER PRIMARY KEY,
+    percentage NUMERIC NOT NULL
+);
+
+-- Insere ou atualiza os níveis de bônus.
+INSERT INTO public.career_plan_config (level, percentage) VALUES
+(1, 0.05), (2, 0.03), (3, 0.01)
+ON CONFLICT (level) DO UPDATE SET percentage = EXCLUDED.percentage;
+
+-- 6. TABELA DE CONFIGURAÇÕES DA PLATAFORMA (platform_settings)
+CREATE TABLE IF NOT EXISTS public.platform_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    dollar_rate NUMERIC,
+    withdrawal_fee_percent NUMERIC,
+    signup_bonus_usd NUMERIC,
+    pix_key TEXT,
+    is_maintenance_mode BOOLEAN,
+    maintenance_end_time TEXT, -- Stores timestamp for maintenance end
+    allow_new_registrations BOOLEAN,
+    logo_url TEXT,
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE public.platform_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE public.platform_settings ADD COLUMN IF NOT EXISTS maintenance_end_time TEXT;
+
+-- 7. TABELA DE LOGS DE ADMINISTRAÇÃO (admin_logs)
+CREATE TABLE IF NOT EXISTS public.admin_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    timestamp TIMESTAMPTZ,
+    admin_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    admin_name TEXT,
+    action_type TEXT,
+    description TEXT,
+    target_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 8. TABELA DE NOTIFICAÇÕES (notifications)
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  date DATE NOT NULL,
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 9. TABELA DE PLANOS DE INVESTIMENTO (investment_plans)
+CREATE TABLE IF NOT EXISTS public.investment_plans (
+    plan_id TEXT PRIMARY KEY,
+    name TEXT,
+    monthly_return TEXT,
+    return_rate NUMERIC,
+    min_deposit_usd NUMERIC,
+    color TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Insere os planos padrão se a tabela estiver vazia.
+INSERT INTO public.investment_plans (plan_id, name, monthly_return, return_rate, min_deposit_usd, color) VALUES
+('1', 'Conservador', '1% a 5%', 0.05, 10, 'text-brand-blue'),
+('2', 'Moderado', 'até 10%', 0.10, 50, 'text-green-400'),
+('3', 'Agressivo', 'até 15%', 0.15, 100, 'text-yellow-400'),
+('4', 'Select', 'até 25%', 0.25, 200, 'text-red-500')
+ON CONFLICT (plan_id) DO NOTHING;
+
+-- 10. SEGURANÇA: HABILITA Row Level Security (RLS)
+-- Essencial para proteger os dados de cada usuário.
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.career_plan_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.investment_plans ENABLE ROW LEVEL SECURITY;
+
+-- Remove políticas antigas para evitar conflitos ao rodar novamente.
+DROP POLICY IF EXISTS "Public Access" ON public.users;
+DROP POLICY IF EXISTS "Public Access" ON public.transactions;
+DROP POLICY IF EXISTS "Public Access" ON public.messages;
+DROP POLICY IF EXISTS "Public Access" ON public.career_plan_config;
+DROP POLICY IF EXISTS "Public Access" ON public.platform_settings;
+DROP POLICY IF EXISTS "Public Access" ON public.admin_logs;
+DROP POLICY IF EXISTS "Public Access" ON public.notifications;
+DROP POLICY IF EXISTS "Public Access" ON public.investment_plans;
+
+-- Cria políticas permissivas. Em produção, restrinja o acesso (ex: auth.uid() = user_id).
+CREATE POLICY "Public Access" ON public.users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.messages FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.career_plan_config FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.platform_settings FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.admin_logs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public Access" ON public.investment_plans FOR ALL USING (true) WITH CHECK (true);
+
+-- Garante que os papéis padrões do Supabase tenham acesso.
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- 11. DADOS INICIAIS: CRIA O USUÁRIO ADMIN
+-- Insere o usuário admin se ele não existir, ou atualiza para garantir que ele seja admin.
+INSERT INTO public.users (
+    email, password, full_name, is_admin, status, rank, balance_usd, plan, referral_code, additional_data
+) VALUES (
+    'admin@greennseven.com', 'admin123', 'Administrador Geral', true, 'Approved', 'Diamond', 1000000, 'Select', 'ADMINPRO',
+    '{"cpf": "000.000.000-00", "address": {"city": "Sede", "state": "SP"}}'::jsonb
+) ON CONFLICT (email) DO UPDATE SET 
+    is_admin = true,
+    status = 'Approved',
+    full_name = 'Administrador Geral';
+
+-- FIM DO SCRIPT --
+`;
+
+    useEffect(() => {
+        setSettings(platformSettings);
+    }, [platformSettings]);
+
+    // Automatically check Supabase connection on mount
+    useEffect(() => {
+        handleCheckSupabase();
+    }, []);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { id, value, type } = e.target;
+        setSettings(prev => ({
+            ...prev,
+            [id]: type === 'number' ? parseFloat(value) || 0 : value,
+        }));
+    };
+
+    const handleToggleChange = (id: keyof PlatformSettings, checked: boolean) => {
+        setSettings(prev => {
+            const updated = { ...prev, [id]: checked };
+            // If maintenance mode is toggled ON, set 7-hour timer
+            if (id === 'isMaintenanceMode' && checked) {
+                const now = new Date();
+                const sevenHoursLater = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+                updated.maintenanceEndTime = sevenHoursLater.toISOString();
+            } else if (id === 'isMaintenanceMode' && !checked) {
+                // If toggled OFF, clear timer
+                updated.maintenanceEndTime = undefined;
+            }
+            return updated;
+        });
+    };
+    
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        setTimeout(() => {
+            onUpdateSettings(settings);
+            setIsSaving(false);
+            showToast("Configurações salvas e sincronizadas com sucesso!");
+        }, 1000);
+    };
+
+    const handleResetPassword = () => {
+        if (!selectedUserToReset) {
+            alert("Por favor, selecione um usuário.");
+            return;
+        }
+        const user = allUsers.find(u => u.id === selectedUserToReset);
+        if (confirm(`Tem certeza de que deseja enviar um link de redefinição de senha para ${user?.name}?`)) {
+            showToast(`Link enviado para ${user?.email}`, 'success');
+        }
+    };
+    
+    const getApiKey = () => {
+        try {
+            // Safe access to process.env preventing ReferenceError in some environments
+            const env = typeof process !== 'undefined' ? process.env : {};
+            return env.API_KEY || '';
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const handleGenerateLogo = async () => {
+        setIsGeneratingLogo(true);
+        setGeneratedLogoUrl(null);
+
+        const apiKey = getApiKey();
+
+        if (!apiKey) {
+            alert("API Key não configurada no ambiente.");
+            setIsGeneratingLogo(false);
+            return;
+        }
+
+        try {
+            const ai = new GoogleGenAI({ apiKey });
+            const prompt = "A modern and professional logo for a financial investment platform named 'GreennSeven'. The design must be a minimalist vector graphic with a white background, featuring an abstract symbol representing growth and security. Use a sleek color palette of brand green and professional blue. The text 'GreennSeven' should be elegantly integrated.";
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image',
+                contents: { parts: [{ text: prompt }] },
+            });
+
+            for (const part of response.candidates?.[0]?.content?.parts || []) {
+                if (part.inlineData) {
+                    const base64ImageBytes: string = part.inlineData.data;
+                    const imageUrl = `data:image/png;base64,${base64ImageBytes}`;
+                    setGeneratedLogoUrl(imageUrl);
+                    break;
+                }
+            }
+        } catch (error) {
+            console.error("Error generating logo:", error);
+            showToast("Falha ao gerar o logo.", 'error');
+        } finally {
+            setIsGeneratingLogo(false);
+        }
+    };
+    
+    const handleSetLogo = () => {
+        if (generatedLogoUrl) {
+            const newSettings = { ...settings, logoUrl: generatedLogoUrl };
+            setSettings(newSettings);
+            onUpdateSettings(newSettings);
+            showToast("Logo atualizado com sucesso!");
+        }
+    };
+
+    const handleCheckSupabase = async () => {
+        setSupabaseStatus('checking');
+        const result = await checkSupabaseConnection();
+        if (result.success) {
+            setSupabaseStatus('connected');
+            setSupabaseMessage(`Conectado! Tabela 'users' encontrada com ${result.count} registros.`);
+        } else {
+            setSupabaseStatus('error');
+            setSupabaseMessage(`Erro: ${result.message}.`);
+        }
+    };
+
+    const handleSyncData = async () => {
+        setIsSyncing(true);
+        let userSuccess = 0;
+        let userFail = 0;
+        let txSuccess = 0;
+        let txFail = 0;
+
+        // Sync Users
+        for (const user of allUsers) {
+            // Sync using default admin password if it's the admin user
+            const pwd = user.email === 'admin@greennseven.com' ? 'admin123' : undefined;
+            const result = await syncUserToSupabase(user, pwd);
+            if (result.error) {
+                userFail++;
+            } else {
+                userSuccess++;
+            }
+        }
+
+        // Sync Transactions
+        const transactionsToSync = allTransactions || [];
+        for (const tx of transactionsToSync) {
+            const result = await syncTransactionToSupabase(tx);
+            if (result.error) {
+                txFail++;
+            } else {
+                txSuccess++;
+            }
+        }
+        
+        // Sync Settings
+        await syncSettingsToSupabase(settings);
+        
+        setIsSyncing(false);
+        showToast(`Sincronização: ${userSuccess} usuários, ${txSuccess} transações e configurações salvas.`, 'success');
+        handleCheckSupabase(); 
+    };
+    
+    const copySQLToClipboard = () => {
+        navigator.clipboard.writeText(sqlCode);
+        showToast("SQL copiado!", 'success');
+    };
+
+    return (
+        <div className="space-y-8">
+            {toast && <Toast message={toast.message} type={toast.type} />}
+            <div>
+                <h1 className="text-3xl font-bold">Configurações da Plataforma</h1>
+                <p className="text-gray-400">Gerencie as configurações globais e a conexão com o banco de dados.</p>
+            </div>
+            
+            <form className="space-y-8" onSubmit={handleSubmit}>
+                <Card>
+                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                        <span className={`w-3 h-3 rounded-full ${supabaseStatus === 'connected' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></span>
+                        Integração Supabase (Banco de Dados)
+                    </h2>
+                    <div className="bg-brand-black p-4 rounded-lg border border-gray-700">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-white font-semibold">Status da Conexão</h3>
+                            <div className="flex gap-2">
+                                <Button type="button" onClick={handleCheckSupabase} variant="secondary" className="text-xs py-2">
+                                    Testar Conexão
+                                </Button>
+                                <Button type="button" onClick={copySQLToClipboard} variant="ghost" className="text-xs py-2">
+                                    {ICONS.copy} Copiar SQL
+                                </Button>
+                            </div>
+                        </div>
+                        
+                        {supabaseStatus === 'idle' && <p className="text-gray-500 text-sm">Clique em "Testar Conexão" para verificar a integração.</p>}
+                        {supabaseStatus === 'checking' && <p className="text-yellow-400 text-sm animate-pulse">Verificando conexão...</p>}
+                        {supabaseStatus === 'connected' && <p className="text-brand-green text-sm font-bold">{supabaseMessage}</p>}
+                        {supabaseStatus === 'error' && (
+                            <div>
+                                <p className="text-red-500 text-sm font-bold">{supabaseMessage}</p>
+                                <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded p-3">
+                                    <p className="text-white text-xs font-bold mb-1">⚠️ AÇÃO NECESSÁRIA:</p>
+                                    <p className="text-gray-300 text-xs">
+                                        O banco de dados precisa ser configurado ou atualizado no painel do Supabase.
+                                    </p>
+                                    <ol className="list-decimal pl-4 mt-2 text-gray-400 text-xs space-y-1">
+                                        <li>Clique em "Copiar SQL".</li>
+                                        <li>Vá ao Painel do Supabase {'>'} SQL Editor.</li>
+                                        <li>Cole e execute o script. Isso criará as tabelas e adicionará as colunas faltantes.</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div className="mt-4">
+                             <label className="text-xs text-gray-500 uppercase font-bold">Script SQL de Configuração e Correção:</label>
+                             <textarea 
+                                readOnly 
+                                className="w-full h-48 bg-gray-900 text-gray-300 text-[10px] p-2 rounded border border-gray-700 font-mono mt-1 focus:outline-none focus:border-brand-green leading-relaxed"
+                                value={sqlCode}
+                                onClick={(e) => e.currentTarget.select()} 
+                             />
+                             <p className="text-[10px] text-gray-500 mt-1">Este script contém comandos `ALTER TABLE` para corrigir automaticamente seu banco de dados sem perder dados.</p>
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-gray-700">
+                            <h4 className="text-white font-semibold text-sm mb-2">Forçar Sincronização de Dados</h4>
+                            <p className="text-xs text-gray-500 mb-2">Envia todos os dados locais atuais para o Supabase, incluindo usuários, transações e configurações.</p>
+                            <Button 
+                                type="button" 
+                                onClick={handleSyncData} 
+                                disabled={isSyncing}
+                                variant="primary" 
+                                className="w-full sm:w-auto text-sm py-2"
+                            >
+                                {isSyncing ? 'Sincronizando...' : `Sincronizar Agora`}
+                            </Button>
+                        </div>
+                    </div>
+                </Card>
+
+                {/* Remaining settings cards... */}
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Branding & Logo</h2>
+                    <div className="grid md:grid-cols-2 gap-6 items-center">
+                        <div>
+                            <p className="text-sm font-medium text-gray-400 mb-2">Logo Atual</p>
+                            <div className="h-24 w-full bg-brand-black rounded-lg flex items-center justify-center p-4">
+                                {settings.logoUrl ? (
+                                    <img src={settings.logoUrl} alt="GreennSeven Logo" className="max-h-full" />
+                                ) : (
+                                    <div className="flex items-center gap-2 text-gray-400">
+                                        {ICONS.logo}
+                                        <span className="text-lg font-bold">GreennSeven Invest</span>
+                                    </div>
+                                )}
+                            </div>
+                             <Button type="button" onClick={handleGenerateLogo} disabled={isGeneratingLogo} className="mt-4 w-full">
+                                {isGeneratingLogo ? 'Gerando...' : 'Gerar Novo Logo com IA'}
+                            </Button>
+                        </div>
+                        <div>
+                             <p className="text-sm font-medium text-gray-400 mb-2">Logo Gerado</p>
+                             <div className="h-24 w-full bg-brand-black rounded-lg flex items-center justify-center p-4">
+                                {isGeneratingLogo ? (
+                                    <p className="text-gray-400 text-sm">Gerando imagem...</p>
+                                ) : generatedLogoUrl ? (
+                                     <img src={generatedLogoUrl} alt="Generated Logo" className="max-h-full" />
+                                ) : (
+                                     <p className="text-gray-500 text-sm">A pré-visualização aparecerá aqui.</p>
+                                )}
+                             </div>
+                             {generatedLogoUrl && !isGeneratingLogo && (
+                                <Button type="button" variant="primary" onClick={handleSetLogo} className="mt-4 w-full">
+                                    Definir como Logo Ativo
+                                </Button>
+                             )}
+                        </div>
+                    </div>
+                </Card>
+
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Financeiro</h2>
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <Input label="Cotação do Dólar" id="dollarRate" type="number" step="0.01" value={settings.dollarRate} onChange={handleChange} />
+                        <Input label="Taxa de Saque (%)" id="withdrawalFeePercent" type="number" value={settings.withdrawalFeePercent} onChange={handleChange} />
+                        <Input label="Bônus de Cadastro (USD)" id="signupBonusUSD" type="number" value={settings.signupBonusUSD} onChange={handleChange} />
+                    </div>
+                </Card>
+
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Configurações do PIX</h2>
+                    <Input label="Chave PIX (para depósitos)" id="pixKey" value={settings.pixKey} onChange={handleChange} />
+                </Card>
+
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Controles da Plataforma</h2>
+                    <div className="space-y-4 max-w-sm">
+                        <ToggleSwitch
+                            id="isMaintenanceMode"
+                            label="Modo Manutenção"
+                            checked={settings.isMaintenanceMode}
+                            onChange={(checked) => handleToggleChange('isMaintenanceMode', checked)}
+                        />
+                         <ToggleSwitch
+                            id="allowNewRegistrations"
+                            label="Permitir Novos Cadastros"
+                            checked={settings.allowNewRegistrations}
+                            onChange={(checked) => handleToggleChange('allowNewRegistrations', checked)}
+                        />
+                    </div>
+                </Card>
+                
+                <Card>
+                    <h2 className="text-xl font-bold mb-4">Gerenciamento de Usuários</h2>
+                     <div className="flex items-end gap-4">
+                        <div className="flex-1">
+                             <label htmlFor="user-reset-select" className="block text-sm font-medium text-gray-400 mb-1">
+                                Redefinir Senha do Usuário
+                            </label>
+                            <select 
+                                id="user-reset-select" 
+                                className="w-full bg-brand-black border border-gray-700 rounded-lg py-3 px-4 text-white focus:outline-none focus:border-brand-green"
+                                value={selectedUserToReset}
+                                onChange={(e) => setSelectedUserToReset(e.target.value)}
+                            >
+                                {allUsers.filter(u => !u.isAdmin).map(user => (
+                                    <option key={user.id} value={user.id}>{user.name} ({user.email})</option>
+                                ))}
+                            </select>
+                        </div>
+                        <Button type="button" variant="secondary" onClick={handleResetPassword}>
+                            Enviar Link
+                        </Button>
+                     </div>
+                </Card>
+
+                 <div className="flex justify-end">
+                    <Button type="submit" variant="primary" className="px-8 py-3" disabled={isSaving}>
+                        {isSaving ? 'Salvando...' : 'Salvar Configurações'}
+                    </Button>
+                 </div>
+            </form>
+        </div>
+    );
+};
+
+export default Settings;
