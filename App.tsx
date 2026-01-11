@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import type { User, Transaction, Notification, ChatMessage, PlatformSettings, AdminActionLog, Language, InvestmentPlan, SyncStatus } from './types';
 import { View, TransactionStatus, TransactionType, AdminActionType, UserStatus, InvestorRank } from './types';
@@ -24,6 +25,7 @@ import {
     deleteUserById,
     deleteNotificationById,
     authenticateUser,
+    supabase,
 } from './lib/supabase';
 import { requestNotificationPermission, showSystemNotification, formatCurrency } from './lib/utils';
 import { faker } from '@faker-js/faker';
@@ -165,6 +167,7 @@ const App: React.FC = () => {
 
   // Data Loading from Supabase
   const loadRemoteData = async () => {
+    // Prevent sync indicator flicker if redundant calls happen quickly
     setSyncStatus('syncing');
     try {
         const connectionCheck = await checkSupabaseConnection();
@@ -225,6 +228,22 @@ const App: React.FC = () => {
 
   useEffect(() => {
       loadRemoteData();
+  }, []);
+
+  // --- SUPABASE REALTIME SUBSCRIPTION ---
+  useEffect(() => {
+      const channel = supabase.channel('realtime-db-changes')
+          .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+              // Whenever a change happens in the DB (insert, update, delete), reload data
+              // This is a simple but effective strategy to keep clients in sync without complex merging logic
+              // Debounce could be added if traffic is extremely high, but for this scale it's fine.
+              loadRemoteData();
+          })
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(channel);
+      };
   }, []);
 
   const handleLogin = async (email: string, password?: string): Promise<{ success: boolean; message?: string; }> => {

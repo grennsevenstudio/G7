@@ -202,10 +202,21 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, toggleSidebar, n
                     notifications.map((notification) => (
                     <div
                         key={notification.id}
-                        className={`p-3 border-b border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors ${!notification.isRead ? 'bg-gray-50 dark:bg-gray-800/50' : ''}`}
+                        className={`p-3 border-b border-gray-200 dark:border-gray-700 transition-all duration-300 ${
+                            !notification.isRead 
+                                ? 'bg-brand-green/10 border-l-4 border-l-brand-green' 
+                                : 'bg-white dark:bg-brand-gray opacity-70 hover:opacity-100 hover:bg-gray-100 dark:hover:bg-gray-800'
+                        }`}
                     >
-                        <p className="text-sm text-gray-700 dark:text-gray-200">{notification.message}</p>
-                        <p className="text-xs text-gray-500 mt-1">{timeAgo(new Date(notification.date))}</p>
+                        <div className="flex justify-between items-start gap-2">
+                            <p className={`text-sm ${!notification.isRead ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                                {notification.message}
+                            </p>
+                            {!notification.isRead && (
+                                <span className="h-2 w-2 rounded-full bg-brand-green flex-shrink-0 mt-1"></span>
+                            )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1 font-mono">{timeAgo(new Date(notification.date))}</p>
                     </div>
                     ))
                 )}
