@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Language, InvestmentPlan } from '../../types';
 import Button from '../ui/Button';
@@ -45,8 +42,7 @@ const AnimatedWalletUI = () => {
   const decimalPart = parts[1] || '0000';
 
   return (
-    <div className="relative bg-gradient-to-br from-gray-900 via-brand-black to-black border-2 border-brand-green/30 rounded-3xl p-6 shadow-2xl shadow-brand-green/10 overflow-hidden backdrop-blur-sm transform-gpu">
-        <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_top_right,rgba(0,255,156,0.15),transparent_50%)] opacity-70"></div>
+    <div className="relative bg-brand-gray border border-gray-800 rounded-3xl p-6 shadow-none overflow-hidden transform-gpu">
         <div className="relative z-10">
             <div className="flex justify-between items-center">
                 <p className="text-sm font-bold uppercase tracking-widest text-brand-green">Minha Carteira Dolarizada</p>
@@ -64,7 +60,7 @@ const AnimatedWalletUI = () => {
                 </div>
             </div>
 
-            <div className="flex justify-between items-center bg-black/30 p-4 rounded-xl border border-white/10">
+            <div className="flex justify-between items-center bg-black p-4 rounded-xl border border-gray-800">
                 <div>
                     <p className="text-xs text-gray-500 uppercase font-bold">Capital Investido</p>
                     <p className="font-bold text-white text-lg">$ {(15000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
@@ -75,11 +71,11 @@ const AnimatedWalletUI = () => {
                 </div>
             </div>
             
-            <div className="h-1px bg-gradient-to-r from-transparent via-brand-green/30 to-transparent my-5"></div>
+            <div className="h-px bg-gray-800 my-5"></div>
 
             <div className="mt-6 grid grid-cols-2 gap-3">
-                <button className="bg-brand-green text-black font-bold py-3 rounded-lg hover:opacity-90 transition text-sm shadow-[0_0_15px_rgba(0,255,156,0.2)]">Depositar</button>
-                <button className="bg-white/10 text-white font-bold py-3 rounded-lg border border-white/20 hover:bg-white/20 transition text-sm">Sacar Lucro</button>
+                <button className="bg-brand-green text-black font-bold py-3 rounded-lg hover:opacity-90 transition text-sm">Depositar</button>
+                <button className="bg-brand-black text-white font-bold py-3 rounded-lg border border-gray-700 hover:bg-gray-900 transition text-sm">Sacar Lucro</button>
             </div>
         </div>
     </div>
@@ -210,7 +206,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
   };
 
   return (
-    <div className="min-h-screen bg-brand-black text-white font-sans scroll-smooth selection:bg-brand-green selection:text-black">
+    <div className="min-h-screen bg-black text-white font-sans scroll-smooth selection:bg-brand-green selection:text-black">
         <Modal 
             isOpen={!!modalContent} 
             onClose={() => setModalContent(null)} 
@@ -222,7 +218,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </Modal>
 
         {/* TOP MARKET STRIP */}
-        <div className="bg-black/50 border-b border-white/5 py-1 overflow-hidden backdrop-blur-sm relative z-50">
+        <div className="bg-brand-gray border-b border-gray-800 py-1 overflow-hidden relative z-50">
             <div className="animate-marquee whitespace-nowrap flex gap-8 items-center text-[10px] font-mono text-gray-400">
                 <span>BTC/USD <span className="text-green-400">+2.4%</span></span>
                 <span>ETH/USD <span className="text-green-400">+1.8%</span></span>
@@ -239,12 +235,11 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </div>
 
         {/* HEADER */}
-        <header className={`fixed top-6 left-0 w-full z-40 transition-all duration-300 ${scrolled ? 'top-0 py-3 bg-black/80 backdrop-blur-lg border-b border-white/10 shadow-lg shadow-brand-green/5' : 'py-5 bg-transparent'}`}>
+        <header className={`fixed top-6 left-0 w-full z-40 transition-all duration-300 ${scrolled ? 'top-0 py-3 bg-black border-b border-gray-800 shadow-none' : 'py-5 bg-transparent'}`}>
             <div className="container mx-auto px-6">
                 <div className="flex justify-between items-center w-full">
                     <div className="flex items-center gap-2 cursor-pointer shrink-0 group" onClick={() => window.location.reload()}>
                         <div className="relative">
-                            <div className="absolute inset-0 bg-brand-green blur-lg opacity-20 group-hover:opacity-40 transition-opacity"></div>
                             {React.cloneElement(ICONS.career as React.ReactElement<any>, {className: "h-8 w-8 text-brand-green relative z-10"})}
                         </div>
                         <span className="text-xl md:text-2xl font-black tracking-wider text-white">GREENN<span className="text-brand-green">SEVEN</span></span>
@@ -269,18 +264,18 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                             ))}
                         </nav>
 
-                        <div className="flex items-center gap-3 pl-4 border-l border-white/10">
+                        <div className="flex items-center gap-3 pl-4 border-l border-gray-800">
                             {/* Language */}
                             <div className="relative" ref={langMenuRef}>
                                 <button 
                                     onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
-                                    className="flex items-center gap-2 focus:outline-none hover:opacity-80 transition-opacity p-2 rounded-md hover:bg-white/5"
+                                    className="flex items-center gap-2 focus:outline-none hover:opacity-80 transition-opacity p-2 rounded-md hover:bg-gray-800"
                                 >
-                                    <span className="text-2xl leading-none transition-all drop-shadow-md">{LANGUAGE_OPTIONS.find(l => l.code === language)?.flag}</span>
+                                    <span className="text-2xl leading-none transition-all">{LANGUAGE_OPTIONS.find(l => l.code === language)?.flag}</span>
                                 </button>
                                 
                                 {isLangMenuOpen && (
-                                    <div className="absolute right-0 mt-4 w-40 bg-[#111] border border-white/10 rounded-lg shadow-2xl py-2 animate-fade-in-up z-50">
+                                    <div className="absolute right-0 mt-4 w-40 bg-brand-gray border border-gray-800 rounded-lg shadow-none py-2 animate-fade-in-up z-50">
                                         {LANGUAGE_OPTIONS.map((option) => (
                                             <button
                                                 key={option.code}
@@ -288,7 +283,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                                                     setLanguage(option.code);
                                                     setIsLangMenuOpen(false);
                                                 }}
-                                                className={`w-full text-left px-5 py-3 text-sm hover:bg-white/5 flex items-center gap-3 transition-colors ${language === option.code ? 'text-brand-green bg-brand-green/5' : 'text-gray-400'}`}
+                                                className={`w-full text-left px-5 py-3 text-sm hover:bg-black/20 flex items-center gap-3 transition-colors ${language === option.code ? 'text-brand-green bg-brand-green/5' : 'text-gray-400'}`}
                                             >
                                                 <span className="text-lg">{option.flag}</span>
                                                 <span className="font-medium">{option.code.toUpperCase()}</span>
@@ -302,7 +297,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                                 <Button onClick={() => setView(View.Login)} variant="ghost" className="text-sm font-bold text-gray-300 hover:text-white px-4">
                                 {t.login}
                                 </Button>
-                                <Button onClick={() => setView(View.Register)} className="px-6 py-2.5 text-sm rounded-full bg-brand-green text-black font-bold shadow-[0_0_20px_rgba(0,255,156,0.3)] hover:shadow-[0_0_30px_rgba(0,255,156,0.5)] border-none">
+                                <Button onClick={() => setView(View.Register)} className="px-6 py-2.5 text-sm rounded-lg bg-brand-green text-black font-bold border-none hover:opacity-90">
                                 {t.signup}
                                 </Button>
                             </div>
@@ -313,21 +308,12 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </header>
 
         {/* HERO SECTION */}
-        <section id="home" className="relative min-h-[90vh] flex items-center pt-24 pb-12 overflow-hidden">
-            {/* Background Elements */}
-            <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                <div className="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-brand-green/10 rounded-full blur-[120px] animate-pulse-slow"></div>
-                <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-brand-blue/10 rounded-full blur-[100px] animate-pulse-slow" style={{animationDelay: '1s'}}></div>
-                {/* Grid Pattern */}
-                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay"></div>
-                <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:100px_100px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black,transparent)]"></div>
-            </div>
-
+        <section id="home" className="relative min-h-[90vh] flex items-center pt-24 pb-12 overflow-hidden bg-black">
             <div className="container mx-auto px-6 relative z-10">
                 <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
                     {/* Hero Text */}
                     <div className="flex-1 text-center lg:text-left">
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-brand-green/30 bg-brand-green/5 mb-6 animate-fade-in-up">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-800 bg-gray-900 mb-6 animate-fade-in-up">
                             <span className="w-2 h-2 rounded-full bg-brand-green animate-pulse"></span>
                             <span className="text-xs font-bold text-brand-green tracking-wider uppercase">Plataforma Dolarizada</span>
                         </div>
@@ -343,26 +329,26 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                         </p>
                         
                         <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
-                            <Button onClick={() => setView(View.Register)} className="px-10 py-4 text-lg rounded-lg bg-white text-black font-bold hover:bg-gray-200 transition-colors shadow-xl">
+                            <Button onClick={() => setView(View.Register)} className="px-10 py-4 text-lg rounded-lg bg-white text-black font-bold hover:bg-gray-200 transition-colors">
                                 {t.hero_cta}
                             </Button>
-                            <Button onClick={() => openModal('learn')} variant="secondary" className="px-10 py-4 text-lg rounded-lg border-white/20 hover:bg-white/10 hover:border-brand-green/50 text-white">
+                            <Button onClick={() => openModal('learn')} variant="secondary" className="px-10 py-4 text-lg rounded-lg border-gray-800 hover:bg-gray-900 text-white">
                                 {t.hero_learn}
                             </Button>
                         </div>
 
                         {/* Social Proof Strip */}
-                        <div className="mt-12 pt-8 border-t border-white/5 flex gap-8 justify-center lg:justify-start">
+                        <div className="mt-12 pt-8 border-t border-gray-800 flex gap-8 justify-center lg:justify-start">
                             <div>
                                 <p className="text-2xl font-bold text-white">+50k</p>
                                 <p className="text-xs text-gray-500 uppercase tracking-wide">Usuários</p>
                             </div>
-                            <div className="w-px h-10 bg-white/10"></div>
+                            <div className="w-px h-10 bg-gray-800"></div>
                             <div>
                                 <p className="text-2xl font-bold text-brand-green">24/7</p>
                                 <p className="text-xs text-gray-500 uppercase tracking-wide">Suporte</p>
                             </div>
-                            <div className="w-px h-10 bg-white/10"></div>
+                            <div className="w-px h-10 bg-gray-800"></div>
                             <div>
                                 <p className="text-2xl font-bold text-brand-blue">US$ 2M+</p>
                                 <p className="text-xs text-gray-500 uppercase tracking-wide">Volume</p>
@@ -379,7 +365,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </section>
 
         {/* FEATURES (Reduced Padding) */}
-        <section id="features" className="py-16 bg-[#0A0A0A] relative border-t border-white/5">
+        <section id="features" className="py-16 bg-black relative border-t border-gray-800">
             <div className="container mx-auto px-6">
                 <div className="text-center mb-16">
                     <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">{t.features_title}</h2>
@@ -393,8 +379,8 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                         { icon: ICONS.featureLayout, title: t.feature_interface_title, desc: t.feature_interface_desc },
                         { icon: ICONS.featureSupport, title: t.feature_support_title, desc: t.feature_support_desc },
                     ].map((feature, idx) => (
-                        <div key={idx} className="bg-[#121212] p-8 rounded-2xl border border-white/5 hover:border-brand-green/50 transition-all duration-300 group hover:-translate-y-1">
-                            <div className="p-4 bg-black rounded-xl w-fit mb-6 text-brand-green group-hover:scale-110 transition-transform shadow-lg shadow-brand-green/5 border border-white/5">
+                        <div key={idx} className="bg-brand-gray p-8 rounded-2xl border border-gray-800 hover:border-brand-green/30 transition-all duration-300 group hover:-translate-y-1">
+                            <div className="p-4 bg-black rounded-xl w-fit mb-6 text-brand-green group-hover:scale-110 transition-transform border border-gray-800">
                                 {feature.icon}
                             </div>
                             <h3 className="text-xl font-bold mb-3 text-white">{feature.title}</h3>
@@ -415,7 +401,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                         
                         <div className="space-y-8 relative">
                             {/* Vertical Line */}
-                            <div className="absolute left-6 top-4 bottom-4 w-px bg-gradient-to-b from-brand-green/50 to-transparent"></div>
+                            <div className="absolute left-6 top-4 bottom-4 w-px bg-gray-800"></div>
 
                             {[
                                 { step: '01', title: t.step_1_title, desc: t.step_1_desc },
@@ -423,7 +409,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                                 { step: '03', title: t.step_3_title, desc: t.step_3_desc },
                             ].map((item, idx) => (
                                 <div key={idx} className="flex gap-8 relative">
-                                    <div className="w-12 h-12 rounded-full bg-brand-black border border-brand-green/30 flex items-center justify-center font-bold text-brand-green text-xl shadow-[0_0_15px_rgba(0,255,156,0.1)] z-10 shrink-0">
+                                    <div className="w-12 h-12 rounded-full bg-brand-black border border-gray-700 flex items-center justify-center font-bold text-brand-green text-xl z-10 shrink-0">
                                         {item.step}
                                     </div>
                                     <div>
@@ -435,18 +421,17 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                         </div>
                         
                         <div className="mt-12">
-                            <Button onClick={() => setView(View.Register)} className="px-8 py-3 bg-brand-green text-black font-bold rounded-lg shadow-lg hover:shadow-brand-green/30">{t.hero_cta}</Button>
+                            <Button onClick={() => setView(View.Register)} className="px-8 py-3 bg-brand-green text-black font-bold rounded-lg hover:opacity-90">{t.hero_cta}</Button>
                         </div>
                     </div>
                     
                     <div className="relative hidden lg:block">
-                        <div className="absolute inset-0 bg-brand-blue/10 blur-[100px] rounded-full"></div>
                         <img 
                             src="https://images.unsplash.com/photo-1639762681485-074b7f938ba0?q=80&w=2832&auto=format&fit=crop" 
                             alt="Dashboard Mobile" 
-                            className="relative rounded-3xl border border-white/10 shadow-2xl opacity-80 hover:opacity-100 transition-opacity duration-500"
+                            className="relative rounded-3xl border border-gray-800 shadow-none opacity-80 hover:opacity-100 transition-opacity duration-500"
                         />
-                        <div className="absolute -bottom-6 -right-6 bg-brand-black p-6 rounded-2xl border border-white/10 shadow-2xl max-w-xs">
+                        <div className="absolute -bottom-6 -right-6 bg-brand-black p-6 rounded-2xl border border-gray-800 shadow-none max-w-xs">
                             <p className="text-gray-400 text-xs uppercase font-bold mb-2">Status da Conta</p>
                             <div className="flex items-center gap-3">
                                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
@@ -459,8 +444,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </section>
 
         {/* PLANS */}
-        <section id="plans" className="py-24 bg-[#080808] relative">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,178,255,0.05),transparent_50%)]"></div>
+        <section id="plans" className="py-24 bg-black relative">
             <div className="container mx-auto px-6 relative z-10">
                 <div className="text-center mb-16">
                     <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">{t.plans_title}</h2>
@@ -469,13 +453,13 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
 
                 <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                     {investmentPlans.map((plan, idx) => (
-                        <div key={idx} className="bg-[#121212] border border-white/5 rounded-2xl p-6 flex flex-col hover:border-brand-green transition-all duration-300 hover:shadow-[0_0_30px_rgba(0,255,156,0.1)] group relative overflow-hidden">
+                        <div key={idx} className="bg-brand-gray border border-gray-800 rounded-2xl p-6 flex flex-col hover:border-brand-green transition-all duration-300 group relative overflow-hidden">
                             {idx === 1 && (
                                 <div className="absolute top-0 right-0 bg-brand-green text-black text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase">
                                     Recomendado
                                 </div>
                             )}
-                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-brand-green/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <div className="absolute top-0 left-0 w-full h-1 bg-brand-green opacity-0 group-hover:opacity-100 transition-opacity"></div>
                             
                             <h3 className={`text-xl font-bold mb-2 ${plan.color}`}>{plan.name}</h3>
                             <div className="my-6">
@@ -486,21 +470,21 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                             
                             <div className="space-y-4 mb-8 flex-1">
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <div className="w-5 h-5 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green text-xs">✓</div>
+                                    <div className="w-5 h-5 rounded-full bg-gray-900 flex items-center justify-center text-brand-green text-xs">✓</div>
                                     {/* FIX: Use optional chaining to prevent error if translation key is missing. */}
                                     <span className="text-gray-300">{(t as any)?.plan_deposit_label}: <strong className="text-white">US$ {plan.minDepositUSD.toFixed(2)}</strong></span>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <div className="w-5 h-5 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green text-xs">✓</div>
+                                    <div className="w-5 h-5 rounded-full bg-gray-900 flex items-center justify-center text-brand-green text-xs">✓</div>
                                     <span className="text-gray-300">Saques diários</span>
                                 </div>
                                 <div className="flex items-center gap-3 text-sm text-gray-400">
-                                    <div className="w-5 h-5 rounded-full bg-brand-green/10 flex items-center justify-center text-brand-green text-xs">✓</div>
+                                    <div className="w-5 h-5 rounded-full bg-gray-900 flex items-center justify-center text-brand-green text-xs">✓</div>
                                     <span className="text-gray-300">Suporte 24/7</span>
                                 </div>
                             </div>
                             
-                            <Button onClick={() => setView(View.Register)} variant="secondary" fullWidth className="bg-white/5 border-white/10 hover:bg-brand-green hover:text-black hover:border-brand-green transition-all">Começar</Button>
+                            <Button onClick={() => setView(View.Register)} variant="secondary" fullWidth className="bg-gray-900 border-gray-800 hover:bg-brand-green hover:text-black hover:border-brand-green transition-all">Começar</Button>
                         </div>
                     ))}
                 </div>
@@ -508,7 +492,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </section>
 
         {/* FAQ */}
-        <section id="faq" className="py-24 bg-brand-black border-t border-white/5">
+        <section id="faq" className="py-24 bg-brand-black border-t border-gray-800">
             <div className="container mx-auto px-6 max-w-3xl">
                 <div className="text-center mb-16">
                     <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">{t.nav_faq}</h2>
@@ -516,7 +500,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                 
                 <div className="space-y-4">
                     {faqList.map((item, idx) => (
-                        <div key={idx} className="bg-[#121212] border border-white/5 rounded-xl overflow-hidden transition-colors hover:border-white/10">
+                        <div key={idx} className="bg-brand-gray border border-gray-800 rounded-xl overflow-hidden transition-colors hover:border-gray-700">
                             <button 
                                 onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
                                 className="w-full flex justify-between items-center p-6 text-left focus:outline-none"
@@ -527,7 +511,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                                 </span>
                             </button>
                             <div className={`transition-all duration-300 ease-in-out overflow-hidden ${openFaqIndex === idx ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
-                                <div className="p-6 pt-0 text-gray-400 leading-relaxed border-t border-white/5">
+                                <div className="p-6 pt-0 text-gray-400 leading-relaxed border-t border-gray-800">
                                     {item.a}
                                 </div>
                             </div>
@@ -538,7 +522,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
         </section>
 
         {/* FOOTER */}
-        <footer className="bg-black border-t border-white/10 pt-16 pb-8 text-sm">
+        <footer className="bg-black border-t border-gray-800 pt-16 pb-8 text-sm">
             <div className="container mx-auto px-6">
                 <div className="grid md:grid-cols-4 gap-12 mb-12">
                     <div className="col-span-1 md:col-span-1">
@@ -581,7 +565,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                                 id="newsletter-input"
                                 type="email" 
                                 placeholder="Email" 
-                                className="bg-[#111] border border-white/10 rounded px-3 py-2 w-full focus:outline-none focus:border-brand-green text-white placeholder-gray-600 transition-colors" 
+                                className="bg-gray-900 border border-gray-800 rounded px-3 py-2 w-full focus:outline-none focus:border-brand-green text-white placeholder-gray-600 transition-colors" 
                                 value={newsletterEmail}
                                 onChange={(e) => setNewsletterEmail(e.target.value)}
                                 disabled={isSubmittingNewsletter}
@@ -606,7 +590,7 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                     </div>
                 </div>
                 
-                <div className="border-t border-white/10 pt-8 text-center text-xs text-gray-600">
+                <div className="border-t border-gray-800 pt-8 text-center text-xs text-gray-600">
                     <p>&copy; {new Date().getFullYear()} GreennSeven Invest. {t.footer_rights}</p>
                 </div>
             </div>

@@ -98,7 +98,8 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, toggleSidebar, n
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
   const t = TRANSLATIONS[language];
-  const firstName = user.name.split(' ')[0];
+  // Safeguard: Check if user and user.name exist
+  const firstName = user?.name ? user.name.split(' ')[0] : 'Investidor';
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -262,6 +263,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, toggleSidebar, n
             )}
         </div>
       </div>
+    </header>
     </>
   );
 };

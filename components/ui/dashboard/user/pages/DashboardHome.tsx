@@ -27,21 +27,14 @@ interface DashboardHomeProps {
 
 const StatCard: React.FC<{ title: string; value: React.ReactNode; icon: React.ReactNode; subValue?: React.ReactNode; highlight?: boolean; locked?: boolean }> = ({ title, value, icon, subValue, highlight = false, locked = false }) => {
     const borderGradient = highlight 
-        ? 'from-brand-green via-brand-green/50 to-brand-gray' 
+        ? 'from-brand-green to-brand-green/30' 
         : locked 
-            ? 'from-gray-700 via-gray-800 to-gray-900'
-            : 'from-brand-blue/30 via-brand-gray to-brand-gray/30';
+            ? 'from-gray-700 to-gray-800'
+            : 'from-gray-700 to-gray-800';
 
     return (
-        <div className={`relative p-[2px] rounded-2xl bg-gradient-to-br ${borderGradient} transition-all duration-300 hover:shadow-lg hover:shadow-brand-green/10 transform hover:-translate-y-1 h-full`}>
-            <div className="bg-brand-gray rounded-[14px] p-4 sm:p-5 h-full flex flex-col relative overflow-hidden group">
-                {highlight && (
-                    <>
-                        <div className="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-brand-green/10 rounded-full blur-3xl opacity-50 group-hover:opacity-80 transition-opacity duration-500"></div>
-                        <div className="absolute -top-10 -right-10 w-28 h-28 bg-black/20 rounded-full"></div>
-                    </>
-                )}
-
+        <div className={`relative p-[1px] rounded-2xl bg-gradient-to-br ${borderGradient} transition-all duration-300 hover:-translate-y-1 h-full`}>
+            <div className="bg-brand-gray rounded-[15px] p-4 sm:p-5 h-full flex flex-col relative overflow-hidden group">
                 <div className="flex justify-between items-start mb-4 relative z-10">
                     <p className="font-medium text-gray-300 text-sm sm:text-base">{title}</p>
                     <div className={`transition-colors ${highlight ? 'text-brand-green' : 'text-gray-500 group-hover:text-brand-green'}`}>
@@ -180,7 +173,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, transactions, onAdd
     // Simulate stock updates
     useEffect(() => {
         const interval = setInterval(() => {
-            setStocks(prevStocks => prevStocks.map(stock => {
+            setStocks(prev => prev.map(stock => {
                 const change = (Math.random() - 0.5) * 2;
                 const newPrice = Math.max(0.01, stock.price + change);
                 const changePercent = ((newPrice - stock.price) / stock.price) * 100;
@@ -237,7 +230,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, transactions, onAdd
             )}
 
             {/* NEW SECURITY BANNER */}
-            <div className="bg-blue-900/40 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4 animate-fade-in">
+            <div className="bg-blue-900/20 border border-blue-500/30 p-4 rounded-xl flex items-center gap-4 animate-fade-in">
                 <div className="p-3 bg-blue-500/20 rounded-full text-blue-300">
                     {React.cloneElement(ICONS.featureSecurity as React.ReactElement<any>, { className: "w-6 h-6" })}
                 </div>
@@ -269,7 +262,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, transactions, onAdd
                     subValue={t.bonus_desc}
                     highlight
                 />
-                <Card className="h-full flex flex-col justify-center">
+                <Card className="h-full flex flex-col justify-center border-gray-800 bg-brand-gray">
                     <div className="space-y-2">
                         <p className="text-gray-400 text-sm font-medium">{t.projected_profit} ({user.plan}):</p>
                         <p className="text-xl sm:text-2xl font-bold text-brand-green">
@@ -285,7 +278,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, transactions, onAdd
             </div>
 
             {/* Live Earnings Ticker */}
-            <div className="bg-brand-black border border-gray-800 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg relative overflow-hidden">
+            <div className="bg-brand-gray border border-gray-800 rounded-xl p-4 sm:p-6 flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-1 h-full bg-brand-green animate-pulse"></div>
                 <div>
                     <p className="text-gray-400 text-sm mb-1">{t.earnings_today} (Live)</p>
@@ -301,13 +294,13 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, transactions, onAdd
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-gradient-to-r from-brand-gray to-brand-black border border-gray-800 rounded-xl p-4 sm:p-6">
+            <div className="bg-brand-gray border border-gray-800 rounded-xl p-4 sm:p-6">
                 <h3 className="text-lg font-bold text-white mb-4">{t.quick_actions_title}</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Button onClick={onDepositClick} className="h-12 sm:h-14 text-base sm:text-lg font-bold shadow-lg shadow-brand-green/20">
+                    <Button onClick={onDepositClick} className="h-12 sm:h-14 text-base sm:text-lg font-bold">
                         {ICONS.deposit} {t.deposit}
                     </Button>
-                    <Button onClick={onWithdrawClick} variant="secondary" className="h-12 sm:h-14 text-base sm:text-lg font-bold border-gray-700 hover:border-gray-500">
+                    <Button onClick={onWithdrawClick} variant="secondary" className="h-12 sm:h-14 text-base sm:text-lg font-bold border-gray-700 hover:border-gray-600 bg-black">
                         {ICONS.withdraw} {t.withdraw}
                     </Button>
                 </div>
@@ -339,7 +332,7 @@ const DashboardHome: React.FC<DashboardHomeProps> = ({ user, transactions, onAdd
 
                 {/* Recent Transactions */}
                 <div className="lg:col-span-2">
-                    <Card className="h-full border-gray-800 bg-brand-black/20">
+                    <Card className="h-full border-gray-800 bg-brand-gray">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-xl font-bold text-white">{t.recent_transactions}</h3>
                             <button onClick={() => setActiveView('transactions')} className="text-brand-green text-sm hover:underline">Ver todas</button>

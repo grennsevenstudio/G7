@@ -1,5 +1,4 @@
 
-
 import React, { useMemo, useState, useEffect } from 'react';
 import type { User, Transaction, Language } from '../../../../../types';
 import { TransactionStatus, TransactionType, InvestorRank } from '../../../../../types';
@@ -30,7 +29,7 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; 
 );
 
 const LevelCard: React.FC<{ level: number, percentage: number, color: string, description: string }> = ({ level, percentage, color, description }) => (
-    <div className="relative group overflow-hidden rounded-2xl bg-brand-gray border border-gray-800 p-6 transition-all duration-300 hover:border-brand-green/30 hover:shadow-xl hover:shadow-brand-green/5">
+    <div className="relative group overflow-hidden rounded-2xl bg-brand-gray border border-gray-800 p-6 transition-all duration-300 hover:border-brand-green/30">
         <div className={`absolute top-0 right-0 p-3 rounded-bl-2xl bg-brand-black border-l border-b border-gray-800 ${color.replace('bg-', 'text-')}`}>
             <span className="font-black text-xl">{percentage}%</span>
         </div>
@@ -56,9 +55,7 @@ const RankProgress: React.FC<{ user: User }> = ({ user }) => {
     const nextRankName = currentRank.next;
 
     return (
-        <Card className="bg-gradient-to-br from-brand-gray to-brand-black border-gray-800 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-green/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-            
+        <Card className="bg-brand-gray border-gray-800 relative overflow-hidden">
             <div className="flex justify-between items-center mb-6 relative z-10">
                 <div>
                     <p className="text-sm text-gray-400 font-medium mb-1">Patente Atual</p>
@@ -70,7 +67,7 @@ const RankProgress: React.FC<{ user: User }> = ({ user }) => {
                 {nextRankName && (
                     <div className="text-right">
                         <p className="text-sm text-gray-400 font-medium mb-1">Próxima Patente</p>
-                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-700 bg-gray-800 text-gray-300">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-700 bg-gray-900 text-gray-300">
                             <span className="font-bold text-sm uppercase tracking-wider">{nextRankName}</span>
                         </div>
                     </div>
@@ -85,7 +82,7 @@ const RankProgress: React.FC<{ user: User }> = ({ user }) => {
                     </div>
                     <div className="w-full bg-black rounded-full h-3 border border-gray-800 overflow-hidden">
                         <div 
-                            className="bg-gradient-to-r from-brand-green to-brand-blue h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(0,255,156,0.5)]" 
+                            className="bg-brand-green h-full rounded-full transition-all duration-1000 ease-out" 
                             style={{ width: `${progress}%` }}
                         ></div>
                     </div>
@@ -204,7 +201,7 @@ const CareerPlan: React.FC<CareerPlanProps> = ({ user, allUsers = [], allTransac
 
                 <div className="space-y-6">
                     {/* Share Code - Ticket Style */}
-                    <div className="bg-brand-green p-1 rounded-2xl shadow-xl shadow-brand-green/10 transform transition-transform hover:scale-[1.02]">
+                    <div className="bg-brand-green p-1 rounded-2xl shadow-none transform transition-transform hover:scale-[1.02]">
                         <div className="bg-brand-black rounded-xl p-6 border-2 border-brand-green border-dashed relative overflow-hidden">
                             <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-brand-green rounded-full"></div>
                             <div className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-brand-green rounded-full"></div>
