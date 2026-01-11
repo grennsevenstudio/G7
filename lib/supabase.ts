@@ -93,10 +93,9 @@ export const authenticateUser = async (email: string, password?: string): Promis
 
         if (!data) return { user: null, error: null };
 
+        // MAPPING: Ensure data flows correctly from DB snake_case to App camelCase
         const extra = data.additional_data || {};
         const defaultAddress = { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' };
-        // Address might be in top-level JSONB extra or specific columns (not typical for address parts)
-        // We use additional_data as the main source for nested objects
         const address = { ...defaultAddress, ...(extra.address || {}) };
         
         const defaultDocs = { idFrontUrl: '', idBackUrl: '', selfieUrl: '' };
@@ -207,7 +206,7 @@ export const fetchInvestmentPlansFromSupabase = async () => {
 
 export const fetchUsersFromSupabase = async () => {
     try {
-        const { data, error } = await supabase.from('users').select('*');
+        const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
         
         if (error) {
             if (isNetworkError(error)) {
@@ -223,16 +222,13 @@ export const fetchUsersFromSupabase = async () => {
         if (!data) return { data: [], error: null };
 
         const mappedUsers: User[] = data.map((u: any) => {
-            // ROBUST MAPPING: Handles potential null/undefined values safely
             const extra = u.additional_data || {};
             
-            // Ensure address has all required fields by merging with default
             const defaultAddress = { 
                 cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' 
             };
             const address = { ...defaultAddress, ...(extra.address || {}) };
 
-            // Ensure documents has all required fields
             const defaultDocs = { 
                 idFrontUrl: '', idBackUrl: '', selfieUrl: '' 
             };

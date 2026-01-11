@@ -6,7 +6,6 @@ import Button from '../../../../ui/Button';
 import Input from '../../../../ui/Input';
 import ToggleSwitch from '../../../../ui/ToggleSwitch';
 import { ICONS } from '../../../../../constants';
-// FIX: Removed unused `Modality` import
 import { GoogleGenAI } from "@google/genai";
 import { checkSupabaseConnection, syncUserToSupabase, syncTransactionToSupabase, syncSettingsToSupabase } from '../../../../../lib/supabase';
 
@@ -65,78 +64,85 @@ const Settings: React.FC<SettingsProps> = ({ platformSettings, onUpdateSettings,
     };
 
     // SQL Code Definition - THE GOLDEN SOURCE OF TRUTH FOR DB SCHEMA
-    const sqlCode = `-- SCRIPT SQL COMPLETO E ROBUSTO (GREENNSEVEN)
--- Copie e cole este script no SQL Editor do Supabase e clique em "Run".
--- Este script é idempotente: ele cria o que falta e ajusta o que precisa sem apagar dados existentes.
+    const sqlCode = `-- SCRIPT DE CORREÇÃO AUTOMÁTICA (GREENNSEVEN)
+-- Execute este script para corrigir permissões e tabelas.
 
--- 1. HABILITAR EXTENSÕES
+-- 1. EXTENSÕES
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. TABELA DE USUÁRIOS (users)
+-- 2. LIMPEZA DE POLÍTICAS ANTIGAS (Evita conflitos de permissão)
+DO $$ 
+BEGIN 
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Users" ON public.users';
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Transactions" ON public.transactions';
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Notifications" ON public.notifications';
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Messages" ON public.messages';
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Settings" ON public.platform_settings';
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Logs" ON public.admin_logs';
+    EXECUTE 'DROP POLICY IF EXISTS "Public Access Plans" ON public.investment_plans';
+EXCEPTION 
+    WHEN undefined_object THEN NULL; 
+END $$;
+
+-- 3. CRIAÇÃO/ATUALIZAÇÃO DE TABELAS
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
+    password TEXT,
+    full_name TEXT,
+    cpf TEXT,
+    phone TEXT,
+    avatar_url TEXT,
+    plan TEXT DEFAULT 'Conservador',
+    rank TEXT DEFAULT 'Bronze',
+    status TEXT DEFAULT 'Pending',
+    rejection_reason TEXT,
+    is_admin BOOLEAN DEFAULT false,
+    balance_usd NUMERIC DEFAULT 0,
+    capital_invested_usd NUMERIC DEFAULT 0,
+    monthly_profit_usd NUMERIC DEFAULT 0,
+    daily_withdrawable_usd NUMERIC DEFAULT 0,
+    bonus_balance_usd NUMERIC DEFAULT 0,
+    last_plan_change_date TIMESTAMPTZ,
+    referral_code TEXT,
+    referred_by_id UUID,
+    transaction_pin TEXT,
+    support_status TEXT DEFAULT 'open',
+    kyc_analysis TEXT,
+    additional_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Garantir colunas essenciais na tabela users
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS full_name TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cpf TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'Conservador';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS rank TEXT DEFAULT 'Bronze';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pending';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS balance_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS capital_invested_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS monthly_profit_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS daily_withdrawable_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bonus_balance_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_plan_change_date TIMESTAMPTZ;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referral_code TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referred_by_id UUID REFERENCES public.users(id);
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS transaction_pin TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS support_status TEXT DEFAULT 'open';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS kyc_analysis TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS additional_data JSONB DEFAULT '{}'::jsonb;
-
--- 3. TABELA DE TRANSAÇÕES (transactions)
 CREATE TABLE IF NOT EXISTS public.transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id UUID,
+    type TEXT,
+    amount_usd NUMERIC DEFAULT 0,
+    amount_brl NUMERIC DEFAULT 0,
+    status TEXT DEFAULT 'Pending',
+    date TIMESTAMPTZ DEFAULT now(),
+    scheduled_date DATE,
+    withdrawal_details JSONB,
+    referral_level NUMERIC,
+    source_user_id UUID,
+    bonus_payout_handled BOOLEAN DEFAULT false,
+    wallet_source TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS type TEXT;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS amount_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS amount_brl NUMERIC DEFAULT 0;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pending';
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ DEFAULT now();
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS scheduled_date DATE;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS withdrawal_details JSONB;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS referral_level NUMERIC;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS source_user_id UUID;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS bonus_payout_handled BOOLEAN DEFAULT false;
-ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS wallet_source TEXT;
-
--- 4. TABELA DE NOTIFICAÇÕES (notifications)
 CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    user_id UUID,
     message TEXT NOT NULL,
     date TIMESTAMPTZ DEFAULT now(),
     is_read BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. TABELA DE MENSAGENS (messages)
 CREATE TABLE IF NOT EXISTS public.messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    sender_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
-    receiver_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    sender_id UUID,
+    receiver_id UUID,
     text TEXT,
     attachment JSONB,
     timestamp TIMESTAMPTZ DEFAULT now(),
@@ -144,7 +150,6 @@ CREATE TABLE IF NOT EXISTS public.messages (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 6. TABELA DE CONFIGURAÇÕES (platform_settings)
 CREATE TABLE IF NOT EXISTS public.platform_settings (
     id INTEGER PRIMARY KEY DEFAULT 1,
     dollar_rate NUMERIC DEFAULT 5.50,
@@ -158,7 +163,6 @@ CREATE TABLE IF NOT EXISTS public.platform_settings (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 7. TABELA DE LOGS ADMIN (admin_logs)
 CREATE TABLE IF NOT EXISTS public.admin_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     timestamp TIMESTAMPTZ DEFAULT now(),
@@ -170,7 +174,6 @@ CREATE TABLE IF NOT EXISTS public.admin_logs (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 8. TABELA DE PLANOS DE INVESTIMENTO (investment_plans)
 CREATE TABLE IF NOT EXISTS public.investment_plans (
     plan_id TEXT PRIMARY KEY,
     name TEXT,
@@ -181,40 +184,29 @@ CREATE TABLE IF NOT EXISTS public.investment_plans (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 9. CONFIGURAÇÃO DE SEGURANÇA (RLS) - Permissiva para evitar erros de conexão no front
+-- 4. APLICAÇÃO DE RLS (Permissões Totais para API Key)
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Users" ON public.users;
 CREATE POLICY "Public Access Users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Transactions" ON public.transactions;
 CREATE POLICY "Public Access Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Notifications" ON public.notifications;
 CREATE POLICY "Public Access Notifications" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Messages" ON public.messages;
 CREATE POLICY "Public Access Messages" ON public.messages FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.platform_settings ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Settings" ON public.platform_settings;
 CREATE POLICY "Public Access Settings" ON public.platform_settings FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.admin_logs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Logs" ON public.admin_logs;
 CREATE POLICY "Public Access Logs" ON public.admin_logs FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.investment_plans ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public Access Plans" ON public.investment_plans;
 CREATE POLICY "Public Access Plans" ON public.investment_plans FOR ALL USING (true) WITH CHECK (true);
 
--- 10. DADOS PADRÃO (Administrador e Configurações)
-INSERT INTO public.users (email, password, full_name, is_admin, status, rank, balance_usd, plan)
-VALUES ('admin@greennseven.com', 'admin123', 'Administrador Geral', true, 'Approved', 'Diamond', 1000000, 'Select')
-ON CONFLICT (email) DO UPDATE SET is_admin = true;
-
+-- 5. INSERIR DADOS INICIAIS (Se não existirem)
 INSERT INTO public.platform_settings (id, dollar_rate) VALUES (1, 5.50) ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.investment_plans (plan_id, name, monthly_return, return_rate, min_deposit_usd, color) VALUES
@@ -245,13 +237,11 @@ ON CONFLICT (plan_id) DO NOTHING;
     const handleToggleChange = (id: keyof PlatformSettings, checked: boolean) => {
         setSettings(prev => {
             const updated = { ...prev, [id]: checked };
-            // If maintenance mode is toggled ON, set 7-hour timer
             if (id === 'isMaintenanceMode' && checked) {
                 const now = new Date();
                 const sevenHoursLater = new Date(now.getTime() + (7 * 60 * 60 * 1000));
                 updated.maintenanceEndTime = sevenHoursLater.toISOString();
             } else if (id === 'isMaintenanceMode' && !checked) {
-                // If toggled OFF, clear timer
                 updated.maintenanceEndTime = undefined;
             }
             return updated;
@@ -281,7 +271,6 @@ ON CONFLICT (plan_id) DO NOTHING;
     
     const getApiKey = () => {
         try {
-            // Safe access to process.env preventing ReferenceError in some environments
             const env = typeof process !== 'undefined' ? process.env : {};
             return env.API_KEY || '';
         } catch (e) {
@@ -361,6 +350,7 @@ ON CONFLICT (plan_id) DO NOTHING;
             const result = await syncUserToSupabase(user, pwd);
             if (result.error) {
                 userFail++;
+                console.error("Sync User Error:", result.error);
             } else {
                 userSuccess++;
             }
@@ -381,7 +371,7 @@ ON CONFLICT (plan_id) DO NOTHING;
         await syncSettingsToSupabase(settings);
         
         setIsSyncing(false);
-        showToast(`Sincronização: ${userSuccess} usuários, ${txSuccess} transações e configurações salvas.`, 'success');
+        showToast(`Sincronização Completa: ${userSuccess} usuários salvos (${userFail} erros), ${txSuccess} transações salvas.`, userFail > 0 ? 'error' : 'success');
         handleCheckSupabase(); 
     };
     
@@ -426,39 +416,39 @@ ON CONFLICT (plan_id) DO NOTHING;
                                 <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded p-3">
                                     <p className="text-white text-xs font-bold mb-1">⚠️ AÇÃO NECESSÁRIA:</p>
                                     <p className="text-gray-300 text-xs">
-                                        O banco de dados precisa ser configurado ou atualizado no painel do Supabase.
+                                        O banco de dados precisa ser configurado ou atualizado.
                                     </p>
                                     <ol className="list-decimal pl-4 mt-2 text-gray-400 text-xs space-y-1">
                                         <li>Clique em "Copiar SQL".</li>
                                         <li>Vá ao Painel do Supabase {'>'} SQL Editor.</li>
-                                        <li>Cole e execute o script. Isso criará as tabelas e adicionará as colunas faltantes.</li>
+                                        <li>Cole e execute o script. Isso corrigirá todas as tabelas e permissões.</li>
                                     </ol>
                                 </div>
                             </div>
                         )}
                         
                         <div className="mt-4">
-                             <label className="text-xs text-gray-500 uppercase font-bold">Script SQL de Configuração e Correção:</label>
+                             <label className="text-xs text-gray-500 uppercase font-bold">Script SQL de Correção Automática:</label>
                              <textarea 
                                 readOnly 
                                 className="w-full h-48 bg-gray-900 text-gray-300 text-[10px] p-2 rounded border border-gray-700 font-mono mt-1 focus:outline-none focus:border-brand-green leading-relaxed"
                                 value={sqlCode}
                                 onClick={(e) => e.currentTarget.select()} 
                              />
-                             <p className="text-[10px] text-gray-500 mt-1">Este script contém comandos `ALTER TABLE` para corrigir automaticamente seu banco de dados sem perder dados.</p>
+                             <p className="text-[10px] text-gray-500 mt-1">Este script corrige automaticamente permissões (RLS) e colunas faltantes.</p>
                         </div>
 
                         <div className="mt-6 pt-4 border-t border-gray-700">
-                            <h4 className="text-white font-semibold text-sm mb-2">Forçar Sincronização de Dados</h4>
-                            <p className="text-xs text-gray-500 mb-2">Envia todos os dados locais atuais para o Supabase, incluindo usuários, transações e configurações.</p>
+                            <h4 className="text-white font-semibold text-sm mb-2">Salvar Todos os Usuários Locais no Supabase</h4>
+                            <p className="text-xs text-gray-500 mb-4">Se você tem usuários cadastrados que não aparecem no painel, clique aqui para enviar todos os dados locais para o banco de dados.</p>
                             <Button 
                                 type="button" 
                                 onClick={handleSyncData} 
                                 disabled={isSyncing}
                                 variant="primary" 
-                                className="w-full sm:w-auto text-sm py-2"
+                                className="w-full sm:w-auto text-sm py-2 bg-brand-blue hover:bg-brand-blue/80 text-white border-none"
                             >
-                                {isSyncing ? 'Sincronizando...' : `Sincronizar Agora`}
+                                {isSyncing ? 'Enviando Dados...' : `Forçar Sincronização de Tudo`}
                             </Button>
                         </div>
                     </div>
