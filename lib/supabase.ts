@@ -95,7 +95,10 @@ export const authenticateUser = async (email: string, password?: string): Promis
 
         const extra = data.additional_data || {};
         const defaultAddress = { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' };
+        // Address might be in top-level JSONB extra or specific columns (not typical for address parts)
+        // We use additional_data as the main source for nested objects
         const address = { ...defaultAddress, ...(extra.address || {}) };
+        
         const defaultDocs = { idFrontUrl: '', idBackUrl: '', selfieUrl: '' };
         const documents = { ...defaultDocs, ...(extra.documents || {}) };
 
@@ -104,8 +107,8 @@ export const authenticateUser = async (email: string, password?: string): Promis
             name: data.full_name || data.email?.split('@')[0] || 'Sem Nome',
             email: data.email || '',
             password: data.password,
-            cpf: extra.cpf || '',
-            phone: extra.phone || '',
+            cpf: data.cpf || extra.cpf || '',
+            phone: data.phone || extra.phone || '',
             address: address,
             documents: documents,
             kycAnalysis: data.kyc_analysis || extra.kycAnalysis,
@@ -240,8 +243,8 @@ export const fetchUsersFromSupabase = async () => {
                 name: u.full_name || u.email?.split('@')[0] || 'Sem Nome',
                 email: u.email || '',
                 password: u.password, 
-                cpf: extra.cpf || '',
-                phone: extra.phone || '',
+                cpf: u.cpf || extra.cpf || '',
+                phone: u.phone || extra.phone || '',
                 address: address,
                 documents: documents,
                 kycAnalysis: u.kyc_analysis || extra.kycAnalysis,
@@ -408,6 +411,8 @@ export const syncUserToSupabase = async (user: User, password?: string): Promise
             email: user.email,
             password: password || user.password,
             full_name: user.name,
+            cpf: user.cpf,
+            phone: user.phone,
             avatar_url: user.avatarUrl,
             plan: user.plan,
             rank: user.rank,
@@ -424,13 +429,11 @@ export const syncUserToSupabase = async (user: User, password?: string): Promise
             referred_by_id: user.referredById || null,
             transaction_pin: user.transactionPin || null,
             support_status: user.supportStatus,
+            kyc_analysis: user.kycAnalysis || null,
             additional_data: {
-                cpf: user.cpf,
-                phone: user.phone,
                 address: user.address,
                 documents: user.documents,
-                lastProfitUpdate: user.lastProfitUpdate,
-                kycAnalysis: user.kycAnalysis
+                lastProfitUpdate: user.lastProfitUpdate
             }
         };
 
