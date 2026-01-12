@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import type { User, Transaction, ChatMessage, PlatformSettings, AdminActionLog, Notification, InvestmentPlan } from '../types';
 import { InvestorRank, UserStatus } from '../types';
@@ -231,6 +230,7 @@ export const fetchUsersFromSupabase = async () => {
         if (!data) return { data: [], error: null };
 
         const mappedUsers: User[] = data.map((u: any) => {
+            // Defensive coding: handle missing additional_data
             const extra = u.additional_data || {};
             
             const defaultAddress = { 
@@ -432,7 +432,7 @@ export const syncUserToSupabase = async (user: User, password?: string): Promise
             last_plan_change_date: user.lastPlanChangeDate,
             referral_code: user.referralCode,
             referred_by_id: user.referredById || null,
-            transaction_pin: user.transactionPin || null,
+            transaction_pin: user.transaction_pin || null,
             support_status: user.supportStatus,
             kyc_analysis: user.kycAnalysis || null,
             additional_data: {
@@ -619,7 +619,7 @@ export const syncNotificationsToSupabase = async (notifs: Notification[]) => {
             user_id: n.userId,
             message: n.message,
             date: n.date,
-            is_read: n.isRead
+            is_read: n.isRead // n is Notification type, so it has isRead property.
         }));
         
         const { error } = await supabase.from('notifications').upsert(dbNotifs, { onConflict: 'id' });

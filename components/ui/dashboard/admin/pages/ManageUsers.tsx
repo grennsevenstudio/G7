@@ -60,7 +60,7 @@ const VerificationModal: React.FC<{
         onClose();
     };
 
-    const fullAddress = `${user.address.street}, ${user.address.number}${user.address.complement ? ` - ${user.address.complement}` : ''} - ${user.address.neighborhood}, ${user.address.city} - ${user.address.state}, ${user.address.cep}`;
+    const fullAddress = user.address ? `${user.address.street || ''}, ${user.address.number || ''}${user.address.complement ? ` - ${user.address.complement}` : ''} - ${user.address.neighborhood || ''}, ${user.address.city || ''} - ${user.address.state || ''}, ${user.address.cep || ''}` : 'Endereço não informado';
 
     return (
         <>
@@ -88,26 +88,32 @@ const VerificationModal: React.FC<{
                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                             <p className="text-sm font-medium text-gray-400 mb-1">RG/CNH (Frente)</p>
-                            <div className="aspect-[3/2] rounded-lg overflow-hidden border border-gray-700 bg-black">
-                                <a href={user.documents.idFrontUrl} target="_blank" rel="noopener noreferrer">
-                                    <img src={user.documents.idFrontUrl} alt="Frente do Documento" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
-                                </a>
+                            <div className="aspect-[3/2] rounded-lg overflow-hidden border border-gray-700 bg-black flex items-center justify-center">
+                                {user.documents?.idFrontUrl ? (
+                                    <a href={user.documents.idFrontUrl} target="_blank" rel="noopener noreferrer" className="w-full h-full">
+                                        <img src={user.documents.idFrontUrl} alt="Frente do Documento" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
+                                    </a>
+                                ) : <span className="text-xs text-gray-500">Pendente</span>}
                             </div>
                         </div>
                         <div>
                             <p className="text-sm font-medium text-gray-400 mb-1">RG/CNH (Verso)</p>
-                            <div className="aspect-[3/2] rounded-lg overflow-hidden border border-gray-700 bg-black">
-                                <a href={user.documents.idBackUrl} target="_blank" rel="noopener noreferrer">
-                                    <img src={user.documents.idBackUrl} alt="Verso do Documento" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
-                                </a>
+                            <div className="aspect-[3/2] rounded-lg overflow-hidden border border-gray-700 bg-black flex items-center justify-center">
+                                {user.documents?.idBackUrl ? (
+                                    <a href={user.documents.idBackUrl} target="_blank" rel="noopener noreferrer" className="w-full h-full">
+                                        <img src={user.documents.idBackUrl} alt="Verso do Documento" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
+                                    </a>
+                                ) : <span className="text-xs text-gray-500">Pendente</span>}
                             </div>
                         </div>
                         <div>
                             <p className="text-sm font-medium text-gray-400 mb-1">Selfie com Documento</p>
-                            <div className="aspect-[3/2] rounded-lg overflow-hidden border border-gray-700 bg-black">
-                                <a href={user.documents.selfieUrl} target="_blank" rel="noopener noreferrer">
-                                    <img src={user.documents.selfieUrl} alt="Selfie com Documento" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
-                                </a>
+                            <div className="aspect-[3/2] rounded-lg overflow-hidden border border-gray-700 bg-black flex items-center justify-center">
+                                {user.documents?.selfieUrl ? (
+                                    <a href={user.documents.selfieUrl} target="_blank" rel="noopener noreferrer" className="w-full h-full">
+                                        <img src={user.documents.selfieUrl} alt="Selfie com Documento" className="w-full h-full object-contain hover:scale-105 transition-transform duration-300" />
+                                    </a>
+                                ) : <span className="text-xs text-gray-500">Pendente</span>}
                             </div>
                         </div>
                      </div>
@@ -180,7 +186,7 @@ const UserRow: React.FC<{
                         </p>
                     )}
                 </td>
-                <td className="p-4">{user.joinedDate}</td>
+                <td className="p-4">{user.joinedDate ? new Date(user.joinedDate).toLocaleDateString('pt-BR') : 'N/A'}</td>
                 <td className="p-4">
                     <div className="flex gap-2 flex-wrap items-center">
                         {user.status === UserStatus.Pending ? (
@@ -199,9 +205,12 @@ interface ManageUsersProps {
     allUsers: User[];
     onAdminUpdateUserBalance: (userId: string, newBalance: number) => void;
     onUpdateUserStatus: (userId: string, newStatus: UserStatus, reason?: string) => void;
+    onRefreshData?: () => void;
 }
 
-const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, onAdminUpdateUserBalance, onUpdateUserStatus }) => {
+const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, onAdminUpdateUserBalance, onUpdateUserStatus, onRefreshData }) => {
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
     // Show non-admin users first, with pending users at the top
     const sortedUsers = [...allUsers]
       .filter(u => !u.isAdmin)
@@ -211,12 +220,34 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, onAdminUpdateUserBa
         return new Date(b.joinedDate).getTime() - new Date(a.joinedDate).getTime();
       });
 
+    const handleManualRefresh = async () => {
+        if (onRefreshData) {
+            setIsRefreshing(true);
+            await onRefreshData();
+            setTimeout(() => setIsRefreshing(false), 1000);
+        }
+    };
+
     return (
         <div className="space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold">Gestão de Usuários</h1>
-                <p className="text-gray-400">Gerencie contas, saldos e visualize investidores.</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold">Gestão de Usuários</h1>
+                    <p className="text-gray-400">Gerencie contas, saldos e visualize investidores.</p>
+                </div>
+                {onRefreshData && (
+                    <Button 
+                        onClick={handleManualRefresh} 
+                        variant="secondary" 
+                        className="text-sm flex items-center gap-2"
+                        disabled={isRefreshing}
+                    >
+                        <span className={isRefreshing ? "animate-spin" : ""}>{ICONS.refresh}</span>
+                        {isRefreshing ? 'Atualizando...' : 'Atualizar Lista'}
+                    </Button>
+                )}
             </div>
+            
             <Card>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
@@ -230,14 +261,22 @@ const ManageUsers: React.FC<ManageUsersProps> = ({ allUsers, onAdminUpdateUserBa
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedUsers.map(user => (
-                                <UserRow 
-                                    key={user.id} 
-                                    user={user} 
-                                    onAdminUpdateUserBalance={onAdminUpdateUserBalance} 
-                                    onUpdateUserStatus={onUpdateUserStatus}
-                                />
-                            ))}
+                            {sortedUsers.length > 0 ? (
+                                sortedUsers.map(user => (
+                                    <UserRow 
+                                        key={user.id} 
+                                        user={user} 
+                                        onAdminUpdateUserBalance={onAdminUpdateUserBalance} 
+                                        onUpdateUserStatus={onUpdateUserStatus}
+                                    />
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                                        Nenhum usuário encontrado. Clique em "Atualizar Lista" para sincronizar com o banco de dados.
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                 </div>

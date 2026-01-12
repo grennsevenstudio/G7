@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { User, Transaction, ChatMessage, PlatformSettings, AdminActionLog, Language, Notification, InvestmentPlan } from '../../../../types';
 import { TransactionStatus, UserStatus, TransactionType } from '../../../../types';
 import Sidebar from '../../../layout/Sidebar';
@@ -64,6 +64,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
 
   const t = TRANSLATIONS[language] || TRANSLATIONS['pt'];
 
+  // Force initial refresh when admin dashboard mounts to ensure we see all DB users
+  useEffect(() => {
+      onRefreshData();
+  }, []);
+
   // Calculate pending withdrawals for badge
   const pendingWithdrawalsCount = useMemo(() => {
       return allTransactions.filter(t => t.type === TransactionType.Withdrawal && t.status === TransactionStatus.Pending).length;
@@ -94,7 +99,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = (props) => {
       case 'dashboard':
         return <AdminDashboardHome allUsers={allUsers} allTransactions={allTransactions} onBroadcastNotification={(message: string) => onAddNotification(allUsers.filter(u => !u.isAdmin).map(u => u.id), message)} />;
       case 'users':
-        return <ManageUsers allUsers={allUsers} onAdminUpdateUserBalance={onAdminUpdateUserBalance} onUpdateUserStatus={onUpdateUserStatus} />;
+        return <ManageUsers allUsers={allUsers} onAdminUpdateUserBalance={onAdminUpdateUserBalance} onUpdateUserStatus={onUpdateUserStatus} onRefreshData={onRefreshData} />;
       case 'manage_investments':
         return <ManageInvestments allUsers={allUsers} onAdminUpdateUserCapital={onAdminUpdateUserCapital} />;
       case 'profit_projection':
