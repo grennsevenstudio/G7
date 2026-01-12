@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import type { User, Transaction, ChatMessage, PlatformSettings, AdminActionLog, Notification, InvestmentPlan } from '../types';
 import { InvestorRank, UserStatus } from '../types';

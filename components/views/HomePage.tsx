@@ -533,11 +533,6 @@ const HomePage: React.FC<HomePageProps> = ({ setView, language, setLanguage, inv
                         <p className="text-gray-500 leading-relaxed mb-6">
                             {t.footer_desc}
                         </p>
-                        <div className="flex gap-4">
-                            <a href="https://wa.me/18199409102" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-brand-green transition-colors" title="WhatsApp Suporte">{ICONS.whatsapp}</a>
-                            <a href="https://www.instagram.com/greennseven?igsh=amhsM2N6MWw1MzIx" target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-brand-green transition-colors">{ICONS.instagram}</a>
-                            <a href="#" className="text-gray-500 hover:text-brand-green transition-colors">{ICONS.facebook}</a>
-                        </div>
                     </div>
                     
                     <div>

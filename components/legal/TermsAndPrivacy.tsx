@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ICONS } from '../../constants';
 
 export const TERMS_OF_USE_CONTENT = (
@@ -119,20 +119,6 @@ export const CONTACT_CONTENT = (
             <div>
                 <p className="text-xs font-bold text-gray-500 uppercase mb-1">Email de Suporte:</p>
                 <p className="text-brand-green font-medium">greennseven@gmail.com</p>
-            </div>
-            <div>
-                <p className="text-xs font-bold text-gray-500 uppercase mb-1">WhatsApp de Suporte:</p>
-                <a 
-                    href="https://wa.me/18199409102" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-white hover:text-brand-green transition-colors group"
-                >
-                    <span className="p-1.5 bg-brand-green/20 rounded text-brand-green group-hover:scale-110 transition-transform">
-                        {ICONS.whatsapp}
-                    </span>
-                    <span className="font-bold">+1 (819) 940-9102</span>
-                </a>
             </div>
             <div>
                 <p className="text-xs font-bold text-gray-500 uppercase mb-1">Horário de Atendimento:</p>
