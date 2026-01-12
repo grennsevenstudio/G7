@@ -49,6 +49,21 @@ const calculateRank = (balance: number): InvestorRank => {
   return InvestorRank.Bronze;
 };
 
+// HELPER: Merge lists by ID, preferring remote data but keeping local-only items (pending sync)
+const mergeLists = <T extends { id: string }>(localList: T[], remoteList: T[] | null): T[] => {
+    if (!remoteList || remoteList.length === 0) return localList; // If remote fetch fails or is empty, use local
+    const remoteMap = new Map(remoteList.map(item => [item.id, item]));
+    const merged = [...remoteList];
+    
+    // Add local items that are NOT in remote (preserves unsynced data)
+    localList.forEach(localItem => {
+        if (!remoteMap.has(localItem.id)) {
+            merged.push(localItem);
+        }
+    });
+    return merged;
+};
+
 const App: React.FC = () => {
   // Initialize state synchronously from LocalStorage to prevent login flash
   const initialLocalData = getAllData();
@@ -167,10 +182,8 @@ const App: React.FC = () => {
 
   // Data Loading from Supabase
   const loadRemoteData = async () => {
-    // Prevent sync indicator flicker if redundant calls happen quickly
     setSyncStatus('syncing');
     try {
-        const connectionCheck = await checkSupabaseConnection();
         const [
             { data: remoteUsers, error: usersError },
             { data: remoteTxs, error: txsError },
@@ -199,23 +212,26 @@ const App: React.FC = () => {
 
         if (remoteCareerPlan) setReferralRates(remoteCareerPlan);
 
+        // Get current local data to merge with
         const localData = getAllData();
-        setDbState(prev => ({
-            ...prev,
-            users: usersError ? localData.users : remoteUsers || [],
-            transactions: txsError ? localData.transactions : remoteTxs || [],
-            chatMessages: msgError ? localData.chatMessages : remoteMessages || [],
-            notifications: notifError ? localData.notifications : remoteNotifications || [],
-            adminActionLogs: logsError ? localData.adminActionLogs : remoteLogs || [],
+
+        // Construct new state with merging strategy
+        const newState: AppDB = {
+            users: mergeLists(localData.users, remoteUsers),
+            transactions: mergeLists(localData.transactions, remoteTxs),
+            chatMessages: mergeLists(localData.chatMessages, remoteMessages),
+            notifications: mergeLists(localData.notifications, remoteNotifications),
+            adminActionLogs: mergeLists(localData.adminActionLogs, remoteLogs),
             platformSettings: settingsError ? localData.platformSettings : remoteSettings || ({} as any),
             investmentPlans: plansError ? localData.investmentPlans : (remotePlans && remotePlans.length > 0) ? remotePlans : DEFAULT_PLANS
-        }));
+        };
+
+        setDbState(newState);
+        saveAllData(newState);
         
-        saveAllData(dbState);
         const storedUserId = getSessionUser();
         if (storedUserId) {
-            const users = remoteUsers || localData.users;
-            const user = users.find((u: User) => u.id === storedUserId);
+            const user = newState.users.find((u: User) => u.id === storedUserId);
             if (user) setLoggedUser(user);
         }
         setIsLoading(false);
@@ -235,8 +251,6 @@ const App: React.FC = () => {
       const channel = supabase.channel('realtime-db-changes')
           .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
               // Whenever a change happens in the DB (insert, update, delete), reload data
-              // This is a simple but effective strategy to keep clients in sync without complex merging logic
-              // Debounce could be added if traffic is extremely high, but for this scale it's fine.
               loadRemoteData();
           })
           .subscribe();
