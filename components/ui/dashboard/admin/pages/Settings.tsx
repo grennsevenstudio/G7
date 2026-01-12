@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     avatar_url TEXT,
     plan TEXT DEFAULT 'Conservador',
     rank TEXT DEFAULT 'Bronze',
-    status TEXT DEFAULT 'Pending',
+    status TEXT DEFAULT 'Pendente', -- Padrão em Português
     rejection_reason TEXT,
     is_admin BOOLEAN DEFAULT false,
     balance_usd NUMERIC DEFAULT 0,

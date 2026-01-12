@@ -1,7 +1,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import type { User, Transaction, ChatMessage, PlatformSettings, AdminActionLog, Notification, InvestmentPlan } from '../types';
-import { InvestorRank } from '../types';
+import { InvestorRank, UserStatus } from '../types';
 
 // ============================================================================
 // CONFIGURAÇÃO DO SUPABASE
@@ -61,13 +61,22 @@ const handleSupabaseError = (e: any, context: string) => {
 // Helper to normalize rank to Title Case to match Enum
 const normalizeRank = (rank: string): InvestorRank => {
     if (!rank) return InvestorRank.Bronze;
-    // Convert "bronze" -> "Bronze", "GOLD" -> "Gold"
     const titleCase = rank.charAt(0).toUpperCase() + rank.slice(1).toLowerCase();
     
     if (Object.values(InvestorRank).includes(titleCase as InvestorRank)) {
         return titleCase as InvestorRank;
     }
     return InvestorRank.Bronze;
+};
+
+// Helper to normalize status (English DB -> Portuguese App)
+const normalizeStatus = (status: string): UserStatus => {
+    if (!status) return UserStatus.Pending;
+    const s = status.toLowerCase();
+    // Maps DB 'Pending' to App 'Pendente', etc.
+    if (s === 'approved' || s === 'aprovado') return UserStatus.Approved;
+    if (s === 'rejected' || s === 'rejeitado' || s === 'recusado') return UserStatus.Rejected;
+    return UserStatus.Pending;
 };
 
 export const authenticateUser = async (email: string, password?: string): Promise<{ user: User | null, error: any }> => {
@@ -111,7 +120,7 @@ export const authenticateUser = async (email: string, password?: string): Promis
             address: address,
             documents: documents,
             kycAnalysis: data.kyc_analysis || extra.kycAnalysis,
-            status: data.status || 'Pending',
+            status: normalizeStatus(data.status),
             rejectionReason: data.rejection_reason,
             avatarUrl: data.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.full_name || 'User')}&background=00FF9C&color=000`,
             rank: normalizeRank(data.rank),
@@ -244,7 +253,7 @@ export const fetchUsersFromSupabase = async () => {
                 address: address,
                 documents: documents,
                 kycAnalysis: u.kyc_analysis || extra.kycAnalysis,
-                status: u.status || 'Pending',
+                status: normalizeStatus(u.status),
                 rejectionReason: u.rejection_reason,
                 avatarUrl: u.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(u.full_name || 'User')}&background=00FF9C&color=000`,
                 rank: normalizeRank(u.rank),
@@ -412,7 +421,7 @@ export const syncUserToSupabase = async (user: User, password?: string): Promise
             avatar_url: user.avatarUrl,
             plan: user.plan,
             rank: user.rank,
-            status: user.status,
+            status: user.status, // Uses the App status (e.g. 'Pendente') which matches the new DB default
             rejection_reason: user.rejectionReason || null,
             is_admin: user.isAdmin,
             balance_usd: user.balanceUSD,
