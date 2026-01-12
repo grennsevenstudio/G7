@@ -25,13 +25,13 @@ function timeAgo(date: Date): string {
 }
 
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; subtext?: string; color?: string }> = ({ title, value, icon, subtext, color = "text-brand-green" }) => (
-    <Card className="flex-1">
+    <Card className="flex-1 border border-gray-800 bg-brand-gray/50 hover:bg-brand-gray transition-colors">
         <div className="flex items-center gap-4">
-            <div className={`p-3 bg-brand-black rounded-lg ${color}`}>{icon}</div>
+            <div className={`p-3 bg-brand-black rounded-lg ${color} shadow-lg shadow-black/50`}>{icon}</div>
             <div>
-                <p className="text-gray-400 text-sm">{title}</p>
-                <p className="text-2xl font-bold text-white">{value}</p>
-                {subtext && <p className="text-xs text-gray-500 mt-1">{subtext}</p>}
+                <p className="text-gray-400 text-xs uppercase tracking-wider font-bold">{title}</p>
+                <p className="text-3xl font-black text-white mt-1">{value}</p>
+                {subtext && <p className="text-[10px] text-gray-500 mt-1 font-medium">{subtext}</p>}
             </div>
         </div>
     </Card>
@@ -169,6 +169,7 @@ const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTr
                             value={`$ ${totalVolume.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                             icon={ICONS.dollar} 
                         />
+                         {/* EDITED CARD AS REQUESTED */}
                          <StatCard 
                             title="Usuários Cadastrados" 
                             value={totalUsers.toLocaleString('en-US')}

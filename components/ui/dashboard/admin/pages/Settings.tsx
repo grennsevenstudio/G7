@@ -64,56 +64,41 @@ const Settings: React.FC<SettingsProps> = ({ platformSettings, onUpdateSettings,
     };
 
     // SQL Code Definition - THE GOLDEN SOURCE OF TRUTH FOR DB SCHEMA
-    const sqlCode = `-- SCRIPT COMPLETO DE CORREÇÃO E ATUALIZAÇÃO
--- Copie e cole este script no Editor SQL do Supabase e execute.
+    // ATENÇÃO: RLS foi ajustado para "Public Access" para garantir que a aplicação atual (que não usa supabase.auth) funcione.
+    const sqlCode = `-- SCRIPT DE CONFIGURAÇÃO (COMPATÍVEL COM APP ATUAL)
+-- Execute este script no Editor SQL do Supabase.
 
 -- 1. EXTENSÕES
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. LIMPEZA DE POLÍTICAS ANTIGAS (Evita conflitos)
-DO $$ 
-BEGIN 
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Users" ON public.users';
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Transactions" ON public.transactions';
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Notifications" ON public.notifications';
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Messages" ON public.messages';
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Settings" ON public.platform_settings';
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Logs" ON public.admin_logs';
-    EXECUTE 'DROP POLICY IF EXISTS "Public Access Plans" ON public.investment_plans';
-EXCEPTION 
-    WHEN undefined_object THEN NULL; 
-END $$;
-
--- 3. CRIAÇÃO/ATUALIZAÇÃO DE TABELAS (IDEMPOTENTE)
+-- 2. LIMPEZA E CRIAÇÃO DE TABELAS
 CREATE TABLE IF NOT EXISTS public.users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT now()
+    created_at TIMESTAMPTZ DEFAULT now(),
+    password TEXT,
+    full_name TEXT,
+    cpf TEXT,
+    phone TEXT,
+    avatar_url TEXT,
+    plan TEXT DEFAULT 'Conservador',
+    rank TEXT DEFAULT 'Bronze',
+    status TEXT DEFAULT 'Pendente',
+    rejection_reason TEXT,
+    is_admin BOOLEAN DEFAULT false,
+    balance_usd NUMERIC DEFAULT 0,
+    capital_invested_usd NUMERIC DEFAULT 0,
+    monthly_profit_usd NUMERIC DEFAULT 0,
+    daily_withdrawable_usd NUMERIC DEFAULT 0,
+    bonus_balance_usd NUMERIC DEFAULT 0,
+    last_plan_change_date TIMESTAMPTZ,
+    referral_code TEXT,
+    referred_by_id UUID,
+    transaction_pin TEXT,
+    support_status TEXT DEFAULT 'open',
+    kyc_analysis TEXT,
+    additional_data JSONB DEFAULT '{}'::jsonb
 );
-
--- Adiciona colunas se não existirem
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS full_name TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS cpf TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'Conservador';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS rank TEXT DEFAULT 'Bronze';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Pendente';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS balance_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS capital_invested_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS monthly_profit_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS daily_withdrawable_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS bonus_balance_usd NUMERIC DEFAULT 0;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_plan_change_date TIMESTAMPTZ;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referral_code TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS referred_by_id UUID;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS transaction_pin TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS support_status TEXT DEFAULT 'open';
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS kyc_analysis TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS additional_data JSONB DEFAULT '{}'::jsonb;
 
 CREATE TABLE IF NOT EXISTS public.transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -186,37 +171,38 @@ CREATE TABLE IF NOT EXISTS public.investment_plans (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. APLICAÇÃO DE RLS (Permissões Totais para funcionamento da API Key)
+-- 3. POLÍTICAS DE SEGURANÇA (RLS PERMISSIVO PARA APP ATUAL)
+-- AVISO: Isso permite acesso público. Em produção real com Auth, use políticas restritivas.
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Users" ON public.users;
 CREATE POLICY "Public Access Users" ON public.users FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Transactions" ON public.transactions;
 CREATE POLICY "Public Access Transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Notifications" ON public.notifications;
 CREATE POLICY "Public Access Notifications" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Messages" ON public.messages;
 CREATE POLICY "Public Access Messages" ON public.messages FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.platform_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Settings" ON public.platform_settings;
 CREATE POLICY "Public Access Settings" ON public.platform_settings FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.admin_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Logs" ON public.admin_logs;
 CREATE POLICY "Public Access Logs" ON public.admin_logs FOR ALL USING (true) WITH CHECK (true);
 
 ALTER TABLE public.investment_plans ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public Access Plans" ON public.investment_plans;
 CREATE POLICY "Public Access Plans" ON public.investment_plans FOR ALL USING (true) WITH CHECK (true);
 
--- 5. DADOS DE CONFIGURAÇÃO PADRÃO
+-- 4. DADOS DE CONFIGURAÇÃO PADRÃO
 INSERT INTO public.platform_settings (id, dollar_rate) VALUES (1, 5.50) ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO public.investment_plans (plan_id, name, monthly_return, return_rate, min_deposit_usd, color) VALUES
-('1', 'Conservador', '1% a 5%', 0.05, 10, 'text-brand-blue'),
-('2', 'Moderado', 'até 10%', 0.10, 50, 'text-green-400'),
-('3', 'Agressivo', 'até 15%', 0.15, 100, 'text-yellow-400'),
-('4', 'Select', 'até 25%', 0.25, 200, 'text-red-500')
-ON CONFLICT (plan_id) DO NOTHING;
 `;
 
     useEffect(() => {
@@ -416,7 +402,7 @@ ON CONFLICT (plan_id) DO NOTHING;
                                 <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded p-3">
                                     <p className="text-white text-xs font-bold mb-1">⚠️ AÇÃO NECESSÁRIA:</p>
                                     <p className="text-gray-300 text-xs">
-                                        O banco de dados precisa ser atualizado. Algumas colunas ou tabelas podem estar faltando.
+                                        As tabelas podem estar faltando ou o RLS está bloqueando o acesso.
                                     </p>
                                     <ol className="list-decimal pl-4 mt-2 text-gray-400 text-xs space-y-1">
                                         <li>Clique em "Copiar SQL".</li>
