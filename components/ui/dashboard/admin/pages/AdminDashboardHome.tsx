@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import Card from '../../../../ui/Card';
 import Button from '../../../../ui/Button';
@@ -25,13 +24,14 @@ function timeAgo(date: Date): string {
     return `há ${days}d`;
 }
 
-const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; }> = ({ title, value, icon }) => (
+const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode; subtext?: string; color?: string }> = ({ title, value, icon, subtext, color = "text-brand-green" }) => (
     <Card className="flex-1">
         <div className="flex items-center gap-4">
-            <div className="p-3 bg-brand-black rounded-lg text-brand-green">{icon}</div>
+            <div className={`p-3 bg-brand-black rounded-lg ${color}`}>{icon}</div>
             <div>
                 <p className="text-gray-400 text-sm">{title}</p>
                 <p className="text-2xl font-bold text-white">{value}</p>
+                {subtext && <p className="text-xs text-gray-500 mt-1">{subtext}</p>}
             </div>
         </div>
     </Card>
@@ -94,6 +94,9 @@ interface AdminDashboardHomeProps {
 const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTransactions, onBroadcastNotification }) => {
     const totalVolume = allUsers.reduce((sum, user) => sum + user.balanceUSD, 0);
     const totalUsers = allUsers.length;
+    const activeUsers = allUsers.filter(u => u.status === UserStatus.Approved).length;
+    const pendingUsers = allUsers.filter(u => u.status === UserStatus.Pending).length;
+    
     const pendingTransactions = allTransactions.filter(tx => tx.status === TransactionStatus.Pending).length;
     
     const [isBroadcastOpen, setIsBroadcastOpen] = useState(false);
@@ -130,7 +133,11 @@ const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTr
     }, [allUsers]);
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-8 animate-fade-in">
+            <style>{`
+                @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+                .animate-fade-in { animation: fade-in 0.4s ease-out forwards; }
+            `}</style>
             <BroadcastModal 
                 isOpen={isBroadcastOpen}
                 onClose={() => setIsBroadcastOpen(false)}
@@ -163,14 +170,17 @@ const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTr
                             icon={ICONS.dollar} 
                         />
                          <StatCard 
-                            title="Total de Usuários Ativos" 
+                            title="Usuários Cadastrados" 
                             value={totalUsers.toLocaleString('en-US')}
+                            subtext={`${activeUsers} Ativos • ${pendingUsers} Pendentes`}
                             icon={ICONS.adminUsers}
+                            color={pendingUsers > 0 ? "text-yellow-400" : "text-brand-green"}
                         />
                          <StatCard 
                             title="Transações Pendentes" 
                             value={pendingTransactions.toLocaleString('en-US')}
                             icon={ICONS.transactions}
+                            color={pendingTransactions > 0 ? "text-yellow-400" : "text-brand-green"}
                         />
                     </div>
                     
@@ -197,17 +207,16 @@ const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTr
                             {recentSignups.length > 0 ? recentSignups.map(user => {
                                 const referrer = user.referredById ? allUsers.find(u => u.id === user.referredById) : null;
                                 return (
-                                <div key={user.id} className="flex items-center gap-3 p-2 bg-brand-black/40 rounded-lg">
+                                <div key={user.id} className="flex items-center gap-3 p-2 bg-brand-black/40 rounded-lg border border-gray-800 hover:border-brand-green/30 transition-colors">
                                     <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full" />
-                                    <div className="flex-1">
-                                        <p className="text-sm font-semibold text-white">{user.name}</p>
-                                        <p className="text-[10px] text-gray-500">
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+                                        <p className="text-[10px] text-gray-500 truncate">
                                             {new Date(user.joinedDate).toLocaleDateString('pt-BR')}
                                             {referrer && <span className="text-brand-blue"> (por {referrer.name.split(' ')[0]})</span>}
                                         </p>
                                     </div>
-                                    {/* FIX: Use UserStatus enum for comparison instead of a magic string. */}
-                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${user.status === UserStatus.Pending ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-700 text-gray-300'}`}>
+                                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded ${user.status === UserStatus.Pending ? 'bg-yellow-500/20 text-yellow-400' : 'bg-brand-green/20 text-brand-green'}`}>
                                         {user.status}
                                     </span>
                                 </div>
@@ -222,14 +231,14 @@ const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTr
                     <Card>
                         <div className="flex items-center gap-3 mb-4">
                            <div className="p-2 bg-brand-blue/10 rounded-lg text-brand-blue">{ICONS.crown}</div>
-                           <h2 className="text-xl font-bold">Modo Baleia</h2>
+                           <h2 className="text-xl font-bold">Maiores Investidores</h2>
                         </div>
                         <div className="space-y-3">
                             {whales.length > 0 ? whales.map(whale => (
-                                <div key={whale.id} className="flex items-center justify-between p-2 bg-brand-black/40 rounded-lg">
+                                <div key={whale.id} className="flex items-center justify-between p-2 bg-brand-black/40 rounded-lg border border-gray-800">
                                     <div className="flex items-center gap-3">
                                         <img src={whale.avatarUrl} alt={whale.name} className="w-8 h-8 rounded-full" />
-                                        <p className="text-sm font-semibold">{whale.name}</p>
+                                        <p className="text-sm font-semibold">{whale.name.split(' ')[0]}</p>
                                     </div>
                                     <span className="font-mono text-xs font-bold text-brand-green">{formatCurrency(whale.capitalInvestedUSD, 'USD')}</span>
                                 </div>
@@ -252,11 +261,11 @@ const AdminDashboardHome: React.FC<AdminDashboardHomeProps> = ({ allUsers, allTr
                                         <span className="absolute w-3 h-3 bg-brand-green rounded-full animate-ping opacity-75"></span>
                                         <span className="relative w-2 h-2 bg-brand-green rounded-full"></span>
                                     </div>
-                                    <p className="text-sm">
+                                    <p className="text-sm truncate">
                                         <span className="font-bold text-white">{event.user.name}</span>
-                                        <span className="text-gray-400"> acabou de fazer login.</span>
+                                        <span className="text-gray-400"> acessou o painel.</span>
                                     </p>
-                                    <span className="ml-auto text-xs text-gray-500">{timeAgo(event.time)}</span>
+                                    <span className="ml-auto text-xs text-gray-500 whitespace-nowrap">{timeAgo(event.time)}</span>
                                 </div>
                             )) : (
                                 <p className="text-sm text-gray-500 text-center py-4">Aguardando atividade...</p>

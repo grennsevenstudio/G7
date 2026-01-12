@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import type { User, Transaction, ChatMessage, PlatformSettings, AdminActionLog, Notification, InvestmentPlan } from '../types';
 import { InvestorRank, UserStatus } from '../types';
@@ -50,6 +51,7 @@ const isNetworkError = (err: any) => {
  */
 const handleSupabaseError = (e: any, context: string) => {
     if (isNetworkError(e)) {
+        console.error(`Network Error in ${context}:`, e);
         // Return a standardized network error object
         return { data: null, error: { message: 'Failed to fetch', isNetwork: true } };
     }
@@ -102,7 +104,12 @@ export const authenticateUser = async (email: string, password?: string): Promis
         if (!data) return { user: null, error: null };
 
         // MAPPING: Ensure data flows correctly from DB snake_case to App camelCase
-        const extra = data.additional_data || {};
+        let extra = data.additional_data || {};
+        // Defensive: Parse JSON if string (should be object, but safety first)
+        if (typeof extra === 'string') {
+            try { extra = JSON.parse(extra); } catch (e) { console.warn("Failed to parse additional_data", e); extra = {}; }
+        }
+
         const defaultAddress = { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' };
         const address = { ...defaultAddress, ...(extra.address || {}) };
         
@@ -218,6 +225,7 @@ export const fetchUsersFromSupabase = async () => {
         
         if (error) {
             if (isNetworkError(error)) {
+                console.error("Fetch Users Network Error:", error);
                 return { data: null, error: { message: 'Network Error', isNetwork: true } };
             }
             if (error.code === '42P01' || error.code === 'PGRST205') {
@@ -231,7 +239,10 @@ export const fetchUsersFromSupabase = async () => {
 
         const mappedUsers: User[] = data.map((u: any) => {
             // Defensive coding: handle missing additional_data
-            const extra = u.additional_data || {};
+            let extra = u.additional_data || {};
+            if (typeof extra === 'string') {
+                try { extra = JSON.parse(extra); } catch (e) { extra = {}; }
+            }
             
             const defaultAddress = { 
                 cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' 
@@ -432,7 +443,7 @@ export const syncUserToSupabase = async (user: User, password?: string): Promise
             last_plan_change_date: user.lastPlanChangeDate,
             referral_code: user.referralCode,
             referred_by_id: user.referredById || null,
-            transaction_pin: user.transaction_pin || null,
+            transaction_pin: user.transactionPin || null,
             support_status: user.supportStatus,
             kyc_analysis: user.kycAnalysis || null,
             additional_data: {
@@ -619,7 +630,7 @@ export const syncNotificationsToSupabase = async (notifs: Notification[]) => {
             user_id: n.userId,
             message: n.message,
             date: n.date,
-            is_read: n.isRead // n is Notification type, so it has isRead property.
+            is_read: n.isRead
         }));
         
         const { error } = await supabase.from('notifications').upsert(dbNotifs, { onConflict: 'id' });
