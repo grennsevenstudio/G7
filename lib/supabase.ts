@@ -51,7 +51,6 @@ const isNetworkError = (err: any) => {
  */
 const handleSupabaseError = (e: any, context: string) => {
     if (isNetworkError(e)) {
-        console.error(`Network Error in ${context}:`, e);
         // Return a standardized network error object
         return { data: null, error: { message: 'Failed to fetch', isNetwork: true } };
     }
@@ -104,12 +103,7 @@ export const authenticateUser = async (email: string, password?: string): Promis
         if (!data) return { user: null, error: null };
 
         // MAPPING: Ensure data flows correctly from DB snake_case to App camelCase
-        let extra = data.additional_data || {};
-        // Defensive: Parse JSON if string (should be object, but safety first)
-        if (typeof extra === 'string') {
-            try { extra = JSON.parse(extra); } catch (e) { console.warn("Failed to parse additional_data", e); extra = {}; }
-        }
-
+        const extra = data.additional_data || {};
         const defaultAddress = { cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' };
         const address = { ...defaultAddress, ...(extra.address || {}) };
         
@@ -225,7 +219,6 @@ export const fetchUsersFromSupabase = async () => {
         
         if (error) {
             if (isNetworkError(error)) {
-                console.error("Fetch Users Network Error:", error);
                 return { data: null, error: { message: 'Network Error', isNetwork: true } };
             }
             if (error.code === '42P01' || error.code === 'PGRST205') {
@@ -239,10 +232,7 @@ export const fetchUsersFromSupabase = async () => {
 
         const mappedUsers: User[] = data.map((u: any) => {
             // Defensive coding: handle missing additional_data
-            let extra = u.additional_data || {};
-            if (typeof extra === 'string') {
-                try { extra = JSON.parse(extra); } catch (e) { extra = {}; }
-            }
+            const extra = u.additional_data || {};
             
             const defaultAddress = { 
                 cep: '', street: '', number: '', neighborhood: '', city: '', state: '', complement: '' 
@@ -630,7 +620,7 @@ export const syncNotificationsToSupabase = async (notifs: Notification[]) => {
             user_id: n.userId,
             message: n.message,
             date: n.date,
-            is_read: n.isRead
+            is_read: n.is_read
         }));
         
         const { error } = await supabase.from('notifications').upsert(dbNotifs, { onConflict: 'id' });
