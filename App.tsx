@@ -15,7 +15,7 @@ import {
     fetchMessagesFromSupabase, 
     fetchCareerPlanConfig, 
     fetchSettingsFromSupabase, 
-    fetchAdminLogsFromSupabase,
+    fetchAdminLogsFromSupabase, 
     fetchNotificationsFromSupabase,
     syncNotificationToSupabase,
     fetchInvestmentPlansFromSupabase,
@@ -25,7 +25,6 @@ import {
     deleteUserById,
     deleteNotificationById,
     authenticateUser,
-    supabase,
 } from './lib/supabase';
 import { requestNotificationPermission, showSystemNotification, formatCurrency } from './lib/utils';
 import { faker } from '@faker-js/faker';
@@ -47,21 +46,6 @@ const calculateRank = (balance: number): InvestorRank => {
   if (balance >= 5000) return InvestorRank.Gold;
   if (balance >= 1000) return InvestorRank.Silver;
   return InvestorRank.Bronze;
-};
-
-// HELPER: Merge lists by ID, preferring remote data but keeping local-only items (pending sync)
-const mergeLists = <T extends { id: string }>(localList: T[], remoteList: T[] | null): T[] => {
-    if (!remoteList || remoteList.length === 0) return localList; // If remote fetch fails or is empty, use local
-    const remoteMap = new Map(remoteList.map(item => [item.id, item]));
-    const merged = [...remoteList];
-    
-    // Add local items that are NOT in remote (preserves unsynced data)
-    localList.forEach(localItem => {
-        if (!remoteMap.has(localItem.id)) {
-            merged.push(localItem);
-        }
-    });
-    return merged;
 };
 
 const App: React.FC = () => {
@@ -122,11 +106,8 @@ const App: React.FC = () => {
         setInitialReferralCode(refCode);
         // Force view to register page if ref link is used
         setView(View.Register);
-        
-        // Clean the URL to avoid confusion on refresh, keeping the path intact (safe for subdirectories)
-        const url = new URL(window.location.href);
-        url.searchParams.delete('ref');
-        window.history.replaceState({}, document.title, url.toString());
+        // Clean the URL to avoid confusion on refresh, keeping the path
+        window.history.replaceState({}, document.title, '/register');
     } else {
         const storedCode = localStorage.getItem('referral_code');
         if (storedCode) {
@@ -184,6 +165,7 @@ const App: React.FC = () => {
   const loadRemoteData = async () => {
     setSyncStatus('syncing');
     try {
+        const connectionCheck = await checkSupabaseConnection();
         const [
             { data: remoteUsers, error: usersError },
             { data: remoteTxs, error: txsError },
@@ -212,26 +194,23 @@ const App: React.FC = () => {
 
         if (remoteCareerPlan) setReferralRates(remoteCareerPlan);
 
-        // Get current local data to merge with
         const localData = getAllData();
-
-        // Construct new state with merging strategy
-        const newState: AppDB = {
-            users: mergeLists(localData.users, remoteUsers),
-            transactions: mergeLists(localData.transactions, remoteTxs),
-            chatMessages: mergeLists(localData.chatMessages, remoteMessages),
-            notifications: mergeLists(localData.notifications, remoteNotifications),
-            adminActionLogs: mergeLists(localData.adminActionLogs, remoteLogs),
+        setDbState(prev => ({
+            ...prev,
+            users: usersError ? localData.users : remoteUsers || [],
+            transactions: txsError ? localData.transactions : remoteTxs || [],
+            chatMessages: msgError ? localData.chatMessages : remoteMessages || [],
+            notifications: notifError ? localData.notifications : remoteNotifications || [],
+            adminActionLogs: logsError ? localData.adminActionLogs : remoteLogs || [],
             platformSettings: settingsError ? localData.platformSettings : remoteSettings || ({} as any),
             investmentPlans: plansError ? localData.investmentPlans : (remotePlans && remotePlans.length > 0) ? remotePlans : DEFAULT_PLANS
-        };
-
-        setDbState(newState);
-        saveAllData(newState);
+        }));
         
+        saveAllData(dbState);
         const storedUserId = getSessionUser();
         if (storedUserId) {
-            const user = newState.users.find((u: User) => u.id === storedUserId);
+            const users = remoteUsers || localData.users;
+            const user = users.find((u: User) => u.id === storedUserId);
             if (user) setLoggedUser(user);
         }
         setIsLoading(false);
@@ -246,59 +225,71 @@ const App: React.FC = () => {
       loadRemoteData();
   }, []);
 
-  // --- SUPABASE REALTIME SUBSCRIPTION ---
-  useEffect(() => {
-      const channel = supabase.channel('realtime-db-changes')
-          .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-              // Whenever a change happens in the DB (insert, update, delete), reload data
-              loadRemoteData();
-          })
-          .subscribe();
-
-      return () => {
-          supabase.removeChannel(channel);
-      };
-  }, []);
-
   const handleLogin = async (email: string, password?: string): Promise<{ success: boolean; message?: string; }> => {
-    const { user, error } = await authenticateUser(email, password);
+    let authUser: User | null = null;
+    let authError: any = null;
 
-    if (error) {
-        console.error("Login authentication error:", error);
-        return { success: false, message: 'Falha na conexão. Tente novamente.' };
+    // 1. Try Supabase Auth
+    const { user, error } = await authenticateUser(email, password);
+    
+    if (user) {
+        authUser = user;
+    } else {
+        if (error) {
+            console.error("Supabase Login Error:", error);
+            authError = error;
+        }
     }
 
-    if (!user) {
+    // 2. Fallback to Local Auth if Supabase failed or yielded no user
+    if (!authUser) {
+        const localUser = dbState.users.find(u => u.email === email && u.password === password);
+        if (localUser) {
+            console.log("Authenticated via Local Storage Fallback");
+            authUser = localUser;
+            authError = null; // Clear error if local auth succeeds
+        }
+    }
+
+    // 3. Handle Errors if both methods failed
+    if (authError && !authUser) {
+        let errorMsg = "Falha na conexão.";
+        if (authError.message) errorMsg = authError.message;
+        else if (authError.code === '42P01') errorMsg = "Banco de dados não configurado (Tabelas ausentes).";
+        
+        return { success: false, message: errorMsg };
+    }
+
+    if (!authUser) {
         return { success: false, message: 'Credenciais inválidas. Verifique seu email e senha.' };
     }
 
-    // Admin can always log in regardless of status
-    if (user.isAdmin) {
-        setLoggedUser(user);
-        setSessionUser(user.id);
-        setDbState(prev => ({
-            ...prev,
-            users: [...prev.users.filter(u => u.id !== user.id), user]
-        }));
+    // 4. Proceed with Login
+    if (authUser.isAdmin) {
+        setLoggedUser(authUser);
+        setSessionUser(authUser.id);
+        setDbState(prev => {
+             const otherUsers = prev.users.filter(u => u.id !== authUser!.id);
+             return { ...prev, users: [...otherUsers, authUser!] };
+        });
         setView(View.AdminDashboard);
         return { success: true };
     }
 
-    // Check user status for non-admins
-    switch (user.status) {
+    switch (authUser.status) {
         case UserStatus.Approved:
-            setLoggedUser(user);
-            setSessionUser(user.id);
-            setDbState(prev => ({
-                ...prev,
-                users: [...prev.users.filter(u => u.id !== user.id), user]
-            }));
+            setLoggedUser(authUser);
+            setSessionUser(authUser.id);
+            setDbState(prev => {
+                const otherUsers = prev.users.filter(u => u.id !== authUser!.id);
+                return { ...prev, users: [...otherUsers, authUser!] };
+            });
             setView(View.UserDashboard);
             return { success: true };
         case UserStatus.Pending:
             return { success: false, message: 'Sua conta está em análise. Você será notificado após a aprovação.' };
         case UserStatus.Rejected:
-            return { success: false, message: `Seu cadastro foi rejeitado. Motivo: ${user.rejectionReason || 'Não especificado'}` };
+            return { success: false, message: `Seu cadastro foi rejeitado. Motivo: ${authUser.rejectionReason || 'Não especificado'}` };
         default:
             return { success: false, message: 'Status de conta desconhecido. Contate o suporte.' };
     }
@@ -338,9 +329,10 @@ const App: React.FC = () => {
           plan: 'Conservador',
           balanceUSD: dbState.platformSettings.signupBonusUSD || 0,
           capitalInvestedUSD: 0,
+          availableBalanceUSD: dbState.platformSettings.signupBonusUSD || 0, // Bonus goes to wallet
           monthlyProfitUSD: 0,
           dailyWithdrawableUSD: 0,
-          bonusBalanceUSD: dbState.platformSettings.signupBonusUSD || 0,
+          bonusBalanceUSD: 0,
           isAdmin: false,
           joinedDate: new Date().toISOString(),
           lastProfitUpdate: new Date().toISOString(),
@@ -354,12 +346,35 @@ const App: React.FC = () => {
           if (referrer) newUser.referredById = referrer.id;
       }
 
+      // 3. Sync to Supabase FIRST to ensure data persistence
+      // We pass the password explicitly because the User type might have it optional
+      const syncResult = await syncUserToSupabase(newUser, data.password);
+
+      if (syncResult.error) {
+          console.error("Supabase Registration Error Details:", JSON.stringify(syncResult.error, null, 2));
+          
+          if (syncResult.error.message && syncResult.error.message.includes('unique')) {
+               return { success: false, message: 'Este email já está cadastrado.' };
+          }
+          if (syncResult.error.code === '23505') {
+               return { success: false, message: 'Este email já está cadastrado.' };
+          }
+          
+          // If it's a critical error (not just network offline), block registration
+          if (!syncResult.error.isNetwork) {
+              return { success: false, message: 'Erro ao salvar o cadastro. Tente novamente mais tarde.' };
+          }
+          // If offline, we proceed with local state (optional, based on "Web App" nature)
+          // For now, we continue to local state.
+      }
+
+      // 4. Update Local State
       const updatedUsers = [...dbState.users, newUser];
       const newDbState = { ...dbState, users: updatedUsers };
       setDbState(newDbState);
       saveAllData(newDbState);
-      await syncUserToSupabase(newUser, data.password);
 
+      // 5. Notify Admin
       const admin = dbState.users.find(u => u.isAdmin);
       if (admin) {
           const notif: Notification = {
@@ -408,6 +423,7 @@ const App: React.FC = () => {
               let user = updatedUsers[userIndex];
               const amount = Math.abs(transaction.amountUSD);
               if (userUpdate) user = { ...user, ...userUpdate };
+              
               if (transaction.walletSource === 'bonus') {
                   user.bonusBalanceUSD = Math.max(0, user.bonusBalanceUSD - amount);
               } else if (transaction.walletSource === 'yield') {
@@ -416,8 +432,12 @@ const App: React.FC = () => {
                   user.capitalInvestedUSD = Math.max(0, user.capitalInvestedUSD - amount);
                   const plan = dbState.investmentPlans.find(p => p.name === user.plan) || dbState.investmentPlans[0];
                   user.monthlyProfitUSD = user.capitalInvestedUSD * plan.returnRate;
+              } else if (transaction.walletSource === 'available') {
+                  user.availableBalanceUSD = Math.max(0, user.availableBalanceUSD - amount);
               }
-              user.balanceUSD = user.capitalInvestedUSD + user.dailyWithdrawableUSD + user.bonusBalanceUSD;
+
+              // Update Total Balance
+              user.balanceUSD = user.capitalInvestedUSD + user.dailyWithdrawableUSD + user.bonusBalanceUSD + user.availableBalanceUSD;
               user.rank = calculateRank(user.balanceUSD);
               updatedUsers[userIndex] = user;
               await syncUserToSupabase(user);
@@ -486,12 +506,12 @@ const App: React.FC = () => {
           const user = updatedUsers[userIndex];
           if (tx.type === TransactionType.Deposit) {
               if (newStatus === TransactionStatus.Completed) {
-                  user.capitalInvestedUSD += tx.amountUSD;
-                  const plan = dbState.investmentPlans.find(p => p.name === user.plan) || dbState.investmentPlans[0];
-                  user.monthlyProfitUSD = user.capitalInvestedUSD * plan.returnRate;
-                  user.balanceUSD = user.capitalInvestedUSD + user.dailyWithdrawableUSD + user.bonusBalanceUSD;
+                  // Deposits now go to AVAILABLE wallet, not invested
+                  user.availableBalanceUSD += tx.amountUSD;
+                  
+                  user.balanceUSD = user.capitalInvestedUSD + user.dailyWithdrawableUSD + user.bonusBalanceUSD + user.availableBalanceUSD;
                   user.rank = calculateRank(user.balanceUSD);
-                  notifMessage = `Depósito de ${formatCurrency(tx.amountUSD, 'USD')} confirmado! O valor já está no seu saldo.`;
+                  notifMessage = `Depósito de ${formatCurrency(tx.amountUSD, 'USD')} confirmado! O valor está disponível na sua carteira.`;
 
                   // NEW LOGIC: Trigger bonus payout on first completed deposit
                   if (user.referredById) {
@@ -510,6 +530,7 @@ const App: React.FC = () => {
           } else if (tx.type === TransactionType.Withdrawal) {
               const amount = Math.abs(tx.amountUSD);
               if (newStatus === TransactionStatus.Failed) {
+                  // Refund logic
                   if (tx.walletSource === 'bonus') {
                       user.bonusBalanceUSD += amount;
                   } else if (tx.walletSource === 'yield') {
@@ -518,8 +539,11 @@ const App: React.FC = () => {
                       user.capitalInvestedUSD += amount;
                       const plan = dbState.investmentPlans.find(p => p.name === user.plan) || dbState.investmentPlans[0];
                       user.monthlyProfitUSD = user.capitalInvestedUSD * plan.returnRate;
+                  } else if (tx.walletSource === 'available') {
+                      user.availableBalanceUSD += amount;
                   }
-                  user.balanceUSD = user.capitalInvestedUSD + user.dailyWithdrawableUSD + user.bonusBalanceUSD;
+
+                  user.balanceUSD = user.capitalInvestedUSD + user.dailyWithdrawableUSD + user.bonusBalanceUSD + user.availableBalanceUSD;
                   user.rank = calculateRank(user.balanceUSD);
                   notifMessage = `Saque de ${formatCurrency(amount, 'USD')} rejeitado. Valor estornado.`;
               } else if (newStatus === TransactionStatus.Completed) {
@@ -565,6 +589,47 @@ const App: React.FC = () => {
       saveAllData({ ...dbState, transactions: updatedTxs, users: updatedUsers, notifications: updatedNotifs, adminActionLogs: updatedLogs });
       await syncTransactionToSupabase(updatedTx);
       await syncAdminLogToSupabase(adminLog);
+  };
+
+  // --- Investment Handler (Available -> Invested) ---
+  const handleUserInvest = async (userId: string, amount: number) => {
+      const userIndex = dbState.users.findIndex(u => u.id === userId);
+      if (userIndex === -1) return;
+      
+      const user = dbState.users[userIndex];
+      
+      if (user.availableBalanceUSD < amount) return; // Logic check
+
+      const updatedUser = { 
+          ...user, 
+          availableBalanceUSD: user.availableBalanceUSD - amount,
+          capitalInvestedUSD: user.capitalInvestedUSD + amount,
+          // Recalculate profit based on current plan rate
+          monthlyProfitUSD: (user.capitalInvestedUSD + amount) * ((dbState.investmentPlans.find(p => p.name === user.plan) || dbState.investmentPlans[0]).returnRate),
+          // Lock capital by updating change date
+          lastPlanChangeDate: new Date().toISOString()
+      };
+
+      const updatedUsers = [...dbState.users];
+      updatedUsers[userIndex] = updatedUser;
+
+      // Log transaction for history
+      const investTx: Transaction = {
+          id: faker.string.uuid(),
+          userId: userId,
+          type: TransactionType.Investment, // We could add this type or reuse Deposit
+          status: TransactionStatus.Completed,
+          amountUSD: amount,
+          date: new Date().toISOString(),
+          walletSource: 'available'
+      };
+      
+      const updatedTxs = [...dbState.transactions, investTx];
+
+      setDbState(prev => ({ ...prev, users: updatedUsers, transactions: updatedTxs }));
+      saveAllData({ ...dbState, users: updatedUsers, transactions: updatedTxs });
+      await syncUserToSupabase(updatedUser);
+      await syncTransactionToSupabase(investTx);
   };
 
   const handleDeleteTransaction = async (txId: string) => {
@@ -614,8 +679,8 @@ const App: React.FC = () => {
       const updatedUser = { 
           ...user, 
           bonusBalanceUSD: newBonusBalance,
-          balanceUSD: user.capitalInvestedUSD + user.dailyWithdrawableUSD + newBonusBalance,
-          rank: calculateRank(user.capitalInvestedUSD + user.dailyWithdrawableUSD + newBonusBalance)
+          balanceUSD: user.capitalInvestedUSD + user.dailyWithdrawableUSD + newBonusBalance + user.availableBalanceUSD,
+          rank: calculateRank(user.capitalInvestedUSD + user.dailyWithdrawableUSD + newBonusBalance + user.availableBalanceUSD)
       };
 
       const updatedUsers = [...dbState.users];
@@ -657,8 +722,8 @@ const App: React.FC = () => {
           ...user, 
           capitalInvestedUSD: newCapital,
           monthlyProfitUSD: newCapital * ((dbState.investmentPlans.find(p => p.name === user.plan) || dbState.investmentPlans[0]).returnRate),
-          balanceUSD: newCapital + user.dailyWithdrawableUSD + user.bonusBalanceUSD,
-          rank: calculateRank(newCapital + user.dailyWithdrawableUSD + user.bonusBalanceUSD)
+          balanceUSD: newCapital + user.dailyWithdrawableUSD + user.bonusBalanceUSD + user.availableBalanceUSD,
+          rank: calculateRank(newCapital + user.dailyWithdrawableUSD + user.bonusBalanceUSD + user.availableBalanceUSD)
       };
 
       const updatedUsers = [...dbState.users];
@@ -679,6 +744,98 @@ const App: React.FC = () => {
       setDbState(prev => ({ ...prev, users: updatedUsers, adminActionLogs: updatedLogs }));
       saveAllData({ ...dbState, users: updatedUsers, adminActionLogs: updatedLogs });
       await syncUserToSupabase(updatedUser);
+      await syncAdminLogToSupabase(adminLog);
+  };
+
+  const handleAdminUpdateUserYield = async (userId: string, amount: number, operation: 'add' | 'remove') => {
+      const userIndex = dbState.users.findIndex(u => u.id === userId);
+      if (userIndex === -1) return;
+      
+      const user = dbState.users[userIndex];
+      const actualAmount = Math.abs(amount);
+      let newYieldBalance = user.dailyWithdrawableUSD;
+      
+      if (operation === 'add') {
+          newYieldBalance += actualAmount;
+      } else {
+          newYieldBalance = Math.max(0, newYieldBalance - actualAmount);
+      }
+
+      const updatedUser = { 
+          ...user, 
+          dailyWithdrawableUSD: newYieldBalance,
+          balanceUSD: user.capitalInvestedUSD + newYieldBalance + user.bonusBalanceUSD + user.availableBalanceUSD,
+          rank: calculateRank(user.capitalInvestedUSD + newYieldBalance + user.bonusBalanceUSD + user.availableBalanceUSD)
+      };
+
+      const updatedUsers = [...dbState.users];
+      updatedUsers[userIndex] = updatedUser;
+
+      const adminLog: AdminActionLog = {
+          id: faker.string.uuid(),
+          timestamp: new Date().toISOString(),
+          adminId: loggedUser?.id || 'system',
+          adminName: loggedUser?.name || 'Sistema',
+          actionType: AdminActionType.UserYieldEdit,
+          description: `${operation === 'add' ? 'Adicionou' : 'Removeu'} US$ ${actualAmount.toFixed(2)} de rendimentos diários para ${user.name}`,
+          targetId: userId
+      };
+      
+      const updatedLogs = [adminLog, ...dbState.adminActionLogs];
+
+      setDbState(prev => ({ ...prev, users: updatedUsers, adminActionLogs: updatedLogs }));
+      saveAllData({ ...dbState, users: updatedUsers, adminActionLogs: updatedLogs });
+      await syncUserToSupabase(updatedUser);
+      await syncAdminLogToSupabase(adminLog);
+  };
+
+  const handleAdminBulkUpdateUserYield = async (amount: number, userIds: string[]) => {
+      if (userIds.length === 0) return;
+      
+      const updatedUsers = [...dbState.users];
+      const actualAmount = Math.abs(amount);
+      const isAdd = amount > 0;
+
+      userIds.forEach(uid => {
+          const userIndex = updatedUsers.findIndex(u => u.id === uid);
+          if (userIndex !== -1) {
+              const user = updatedUsers[userIndex];
+              let newYieldBalance = user.dailyWithdrawableUSD;
+              if (isAdd) {
+                  newYieldBalance += actualAmount;
+              } else {
+                  newYieldBalance = Math.max(0, newYieldBalance - actualAmount);
+              }
+              
+              updatedUsers[userIndex] = {
+                  ...user,
+                  dailyWithdrawableUSD: newYieldBalance,
+                  balanceUSD: user.capitalInvestedUSD + newYieldBalance + user.bonusBalanceUSD + user.availableBalanceUSD,
+                  rank: calculateRank(user.capitalInvestedUSD + newYieldBalance + user.bonusBalanceUSD + user.availableBalanceUSD)
+              };
+          }
+      });
+
+      const adminLog: AdminActionLog = {
+          id: faker.string.uuid(),
+          timestamp: new Date().toISOString(),
+          adminId: loggedUser?.id || 'system',
+          adminName: loggedUser?.name || 'Sistema',
+          actionType: AdminActionType.UserBulkYieldEdit,
+          description: `${isAdd ? 'Adicionou' : 'Removeu'} US$ ${actualAmount.toFixed(2)} de rendimentos para ${userIds.length} usuários.`,
+          targetId: 'bulk'
+      };
+
+      const updatedLogs = [adminLog, ...dbState.adminActionLogs];
+
+      setDbState(prev => ({ ...prev, users: updatedUsers, adminActionLogs: updatedLogs }));
+      saveAllData({ ...dbState, users: updatedUsers, adminActionLogs: updatedLogs });
+      
+      // Sync each user
+      for (const uid of userIds) {
+          const u = updatedUsers.find(user => user.id === uid);
+          if (u) await syncUserToSupabase(u);
+      }
       await syncAdminLogToSupabase(adminLog);
   };
 
@@ -733,7 +890,7 @@ const App: React.FC = () => {
           if (rate > 0) {
               const bonusAmount = depositTx.amountUSD * rate;
               referrer.bonusBalanceUSD += bonusAmount;
-              referrer.balanceUSD = referrer.capitalInvestedUSD + referrer.dailyWithdrawableUSD + referrer.bonusBalanceUSD;
+              referrer.balanceUSD = referrer.capitalInvestedUSD + referrer.dailyWithdrawableUSD + referrer.bonusBalanceUSD + referrer.availableBalanceUSD;
               referrer.rank = calculateRank(referrer.balanceUSD);
               
               const bonusTx: Transaction = {
@@ -837,11 +994,12 @@ const App: React.FC = () => {
   const handleAdminUpdateUserBalance = async (userId: string, newBalance: number) => {
       const userIndex = dbState.users.findIndex(u => u.id === userId);
       if (userIndex === -1) return;
+      // Assume editing total balance updates available wallet for simplicity in admin panel
       const diff = newBalance - dbState.users[userIndex].balanceUSD;
       const updatedUser = { 
           ...dbState.users[userIndex], 
           balanceUSD: newBalance, 
-          capitalInvestedUSD: dbState.users[userIndex].capitalInvestedUSD + diff,
+          availableBalanceUSD: Math.max(0, dbState.users[userIndex].availableBalanceUSD + diff),
           rank: calculateRank(newBalance) 
       };
       const updatedUsers = [...dbState.users];
@@ -1056,6 +1214,7 @@ const App: React.FC = () => {
           syncStatus={syncStatus}
           platformSettings={dbState.platformSettings}
           referralRates={referralRates}
+          onInvest={handleUserInvest} // NEW PROP
         />
       )}
       {view === View.AdminDashboard && loggedUser && loggedUser.isAdmin && (
@@ -1076,6 +1235,8 @@ const App: React.FC = () => {
           onAdminUpdateUserBonus={handleAdminUpdateUserBonus}
           onAdminUpdateUserCapital={handleAdminUpdateUserCapital}
           onAdminUpdateUserProfit={handleAdminUpdateUserProfit}
+          onAdminUpdateUserYield={handleAdminUpdateUserYield}
+          onAdminBulkUpdateUserYield={handleAdminBulkUpdateUserYield}
           onUpdateUser={handleUpdateUser}
           onMarkAllNotificationsAsRead={handleMarkAllNotificationsAsRead}
           onAddNotification={handleAddNotification}

@@ -1,5 +1,4 @@
 
-
 export enum View {
   Home,
   Login,
@@ -56,8 +55,9 @@ export interface User {
   rank: InvestorRank;
   plan?: string; // Current investment plan name
   lastPlanChangeDate?: string; // Date of the last plan change
-  balanceUSD: number; // Total balance: capital + monthly profit + bonus
-  capitalInvestedUSD: number;
+  balanceUSD: number; // Total balance: capital + monthly profit + bonus + available
+  capitalInvestedUSD: number; // Locked capital earning interest
+  availableBalanceUSD: number; // Uninvested wallet balance (Deposits sit here)
   monthlyProfitUSD: number;
   dailyWithdrawableUSD: number; // Accumulated daily yields
   bonusBalanceUSD: number; // Accumulated referral bonuses (Separated)
@@ -91,6 +91,7 @@ export enum TransactionType {
   Withdrawal = 'Withdrawal',
   Bonus = 'Bonus',
   Yield = 'Yield',
+  Investment = 'Investment', // New type for moving available -> invested
 }
 
 export enum TransactionStatus {
@@ -119,8 +120,7 @@ export interface Transaction {
   referralLevel?: 1 | 2 | 3;
   sourceUserId?: string;
   bonusPayoutHandled?: boolean;
-  // FIX: Added 'capital' to allow withdrawing from invested capital.
-  walletSource?: 'yield' | 'bonus' | 'capital'; // Indicates which wallet to deduct from (for withdrawals)
+  walletSource?: 'yield' | 'bonus' | 'capital' | 'available'; // Added 'available'
   scheduledDate?: string;
 }
 
@@ -164,6 +164,7 @@ export interface PlatformSettings {
     maintenanceEndTime?: string; // ISO Date string for when maintenance ends
     allowNewRegistrations: boolean;
     logoUrl: string;
+    dailyWithdrawalLimitUSD?: number; // Limite diário de saque global por usuário
 }
 
 export enum AdminActionType {
@@ -176,6 +177,8 @@ export enum AdminActionType {
     UserBonusEdit = 'UserBonusEdit',
     UserCapitalEdit = 'UserCapitalEdit',
     UserProfitEdit = 'UserProfitEdit',
+    UserYieldEdit = 'UserYieldEdit', 
+    UserBulkYieldEdit = 'UserBulkYieldEdit', 
     SettingsUpdate = 'SettingsUpdate',
     PaymentScheduled = 'PaymentScheduled',
     HistoryClear = 'HistoryClear',
